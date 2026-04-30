@@ -1,0 +1,52 @@
+[workspace]
+members = [
+    "crates/governor-core",
+    "crates/governor-cli",
+    "crates/governor-http",
+    "crates/governor-mcp",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.94"
+license = "MIT"
+repository = "https://github.com/brainzzlab-hub/token-governor"
+homepage = "https://github.com/brainzzlab-hub/token-governor"
+authors = ["Sovareq BV <brainzzlab@gmail.com>"]
+description = "Cost-optimizing classifier for AI-agent tasks. Tags tranches with @op/@so/@hk so cheaper models handle simpler work."
+readme = "README.md"
+keywords = ["llm", "router", "classifier", "mcp", "agent"]
+categories = ["command-line-utilities", "development-tools"]
+
+[workspace.dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+tokio = { version = "1.52", features = ["macros", "rt-multi-thread", "fs", "io-util", "io-std", "signal"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls", "webpki-roots", "http2"] }
+clap = { version = "4.6", features = ["derive", "env", "wrap_help"] }
+axum = "0.8"
+tower = "0.5"
+tower-http = { version = "0.6", features = ["trace", "cors"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+thiserror = "2.0"
+anyhow = "1.0"
+sha2 = "0.11"
+hex = "0.4"
+dirs = "6.0"
+async-trait = "0.1"
+rmcp = { version = "1.5", features = ["server", "transport-io", "macros"] }
+
+# dev-deps
+tempfile = "3.13"
+wiremock = "0.6"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+panic = "abort"

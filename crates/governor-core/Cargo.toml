@@ -1,0 +1,38 @@
+[package]
+name = "governor-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Core classification engine for Token Governor — agent-agnostic LLM-tier router."
+readme = "../../README.md"
+keywords = ["llm", "classifier", "router"]
+categories = ["development-tools"]
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+tokio = { workspace = true, features = ["fs", "io-util", "macros", "rt-multi-thread"] }
+reqwest.workspace = true
+tracing.workspace = true
+thiserror.workspace = true
+sha2.workspace = true
+hex.workspace = true
+dirs.workspace = true
+async-trait.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio = { workspace = true, features = ["test-util"] }
+wiremock.workspace = true
+
+[features]
+default = []
+# Enable real-API smoke-test (requires GOVERNOR_API_KEY in env)
+anthropic-smoke = []
