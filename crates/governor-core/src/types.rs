@@ -82,7 +82,9 @@ pub struct ClassifyRequest {
 /// One alternative tier the classifier considered but did not pick as primary.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AlternativeTier {
+    /// The alternative tier the classifier considered.
     pub tier: Tier,
+    /// One-sentence reason this alternative was considered but rejected.
     pub rationale: String,
     /// Extra cost in USD vs the chosen primary. May be negative when this
     /// alternative would actually be cheaper but was rejected on quality grounds.

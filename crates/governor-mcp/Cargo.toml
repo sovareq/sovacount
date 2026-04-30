@@ -9,12 +9,16 @@ authors.workspace = true
 description = "MCP-server frontend for Token Governor (stdio transport)."
 readme = "../../README.md"
 
+[lib]
+name = "governor_mcp"
+path = "src/lib.rs"
+
 [[bin]]
 name = "governor-mcp"
 path = "src/main.rs"
 
 [dependencies]
-governor-core = { path = "../governor-core" }
+governor-core = { path = "../governor-core", version = "0.1" }
 rmcp.workspace = true
 serde.workspace = true
 serde_json.workspace = true

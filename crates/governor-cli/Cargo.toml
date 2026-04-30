@@ -14,7 +14,7 @@ name = "tier-classify"
 path = "src/main.rs"
 
 [dependencies]
-governor-core = { path = "../governor-core" }
+governor-core = { path = "../governor-core", version = "0.1" }
 clap.workspace = true
 serde.workspace = true
 serde_json.workspace = true

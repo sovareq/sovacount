@@ -21,8 +21,7 @@
 //! ```
 
 #![forbid(unsafe_code)]
-// NOTE: `#![warn(missing_docs)]` is temporarily relaxed during the parallel
-// fan-out phase; Worker A re-enables it once all public items have docs.
+#![warn(missing_docs)]
 
 pub mod cache;
 pub mod classifier;
@@ -32,6 +31,8 @@ pub mod heuristic;
 pub mod prompt;
 pub mod providers;
 pub mod types;
+
+pub(crate) mod pricing;
 
 pub use classifier::Classifier;
 pub use config::Config;

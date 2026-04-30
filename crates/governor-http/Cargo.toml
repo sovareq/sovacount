@@ -9,12 +9,15 @@ authors.workspace = true
 description = "HTTP-server frontend for Token Governor."
 readme = "../../README.md"
 
+[lib]
+path = "src/lib.rs"
+
 [[bin]]
 name = "governor-http"
 path = "src/main.rs"
 
 [dependencies]
-governor-core = { path = "../governor-core" }
+governor-core = { path = "../governor-core", version = "0.1" }
 axum.workspace = true
 tokio.workspace = true
 tower.workspace = true
@@ -25,3 +28,7 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 anyhow.workspace = true
 clap.workspace = true
+async-trait.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "test-util"] }
