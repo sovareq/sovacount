@@ -22,14 +22,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     OP for >300 LOC or >5 files or 2+ markers.
   - Tier mapping per provider with optional `mapping.toml` override.
   - Compile-time-embedded classifier system prompt; runtime override supported.
+  - `cost::aggregate` walks the on-disk cache and rolls up cumulative spend
+    by tier and by UTC day; chrono-free (Howard Hinnant date-from-days).
 - `tier-classify` CLI with `--task` / `--scope` / `--stdin` input modes and
   four output formats (`json` / `yaml` / `oneline` / `pretty`).
-- `governor-http` axum server with `POST /classify` and `GET /health`.
+- `governor-http` axum server with `POST /classify`, `GET /cost`, `GET /health`.
   Optional Bearer-token auth. Loopback-only by default.
 - `governor-mcp` stdio MCP server (rmcp 1.5) exposing one tool:
-  `governor_classify`.
+  `governor_classify`. 20 black-box integration tests speak real JSON-RPC
+  over stdio against the spawned binary; 20 Python tests under
+  `tools/mcp-blackbox/` provide a language-agnostic external sanity check.
+- Three-mode router reference (`examples/router.py` + `examples/three-modes.md`)
+  documenting `strict` / `light` / `auto` execution patterns.
+- Working Claude Code PreToolUse hook (`examples/claude-code/`) with
+  fail-open behavior on governor-http unavailability.
 - Workspace-level supply-chain gate via `cargo-deny`.
 - MIT licence.
+
+### Known upstream issues
+- rmcp 1.5 closes the stdio stream cleanly on parse error / UTF-8 BOM
+  prefix instead of replying with `-32700 Parse Error`. Tracked at
+  [modelcontextprotocol/rust-sdk#825](https://github.com/modelcontextprotocol/rust-sdk/issues/825).
+  Pinned in two integration tests so we notice if upstream fixes it.
 
 ### Models recommended (defaults)
 - Anthropic: `@hk` → `claude-haiku-4-5`, `@so` → `claude-sonnet-4-6`,

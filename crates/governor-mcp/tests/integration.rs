@@ -311,8 +311,9 @@ async fn tools_call_unknown_tool_errors() {
 /// error rather than emitting `-32700 Parse Error` per JSON-RPC 2.0.
 ///
 /// This is graceful (exit 0, no crash) but technically non-conformant.
-/// File a tracking issue at <https://github.com/modelcontextprotocol/rust-sdk>
-/// and replace this comment with the issue link once filed.
+/// Tracked upstream:
+/// <https://github.com/modelcontextprotocol/rust-sdk/issues/825>
+/// Update this test if rmcp starts replying with `-32700` instead.
 #[tokio::test]
 async fn malformed_json_closes_stream_cleanly() {
     let mut c = McpClient::spawn();
@@ -600,7 +601,8 @@ async fn mid_message_disconnect_clean_exit() {
 /// [`malformed_json_closes_stream_cleanly`]: rmcp does not strip a UTF-8 BOM
 /// nor reply `-32700 Parse Error`. RFC 8259 forbids BOM in JSON, so this is
 /// arguably correct, but JSON-RPC says we should reply with a Parse Error.
-/// File and link an upstream rmcp issue here.
+/// Tracked upstream:
+/// <https://github.com/modelcontextprotocol/rust-sdk/issues/825>
 #[tokio::test]
 async fn utf8_bom_prefix_does_not_crash() {
     let mut c = McpClient::spawn();

@@ -135,6 +135,16 @@ impl Classifier {
             warn!(error = %e, "cache put failed; ignoring");
         }
     }
+
+    /// Aggregate cached classifications into a [`CostReport`].
+    ///
+    /// Reads every entry under the configured cache directory and rolls up
+    /// counts + cumulative `estimated_cost_usd` by tier and by UTC day. See
+    /// [`crate::cost::aggregate`] for caveats (cached-only data, mtime-based
+    /// day buckets).
+    pub async fn cost_report(&self) -> Result<crate::cost::CostReport> {
+        crate::cost::aggregate(&self.cache.dir).await
+    }
 }
 
 /// Construct the canonical user payload (JSON) we send to the provider.

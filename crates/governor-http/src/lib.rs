@@ -18,7 +18,7 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{get, post},
 };
-use governor_core::{ClassifyRequest, ClassifyResponse, GovernorError};
+use governor_core::{ClassifyRequest, ClassifyResponse, CostReport, GovernorError};
 use serde::Serialize;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
@@ -31,12 +31,20 @@ use tower_http::{cors::CorsLayer, trace::TraceLayer};
 pub trait ClassifierLike: Send + Sync + 'static {
     /// Classify a single request. Mirrors [`governor_core::Classifier::classify`].
     async fn classify(&self, req: ClassifyRequest) -> Result<ClassifyResponse, GovernorError>;
+
+    /// Aggregate cached classifications into a [`CostReport`]. Mirrors
+    /// [`governor_core::Classifier::cost_report`].
+    async fn cost_report(&self) -> Result<CostReport, GovernorError>;
 }
 
 #[async_trait]
 impl ClassifierLike for governor_core::Classifier {
     async fn classify(&self, req: ClassifyRequest) -> Result<ClassifyResponse, GovernorError> {
         governor_core::Classifier::classify(self, req).await
+    }
+
+    async fn cost_report(&self) -> Result<CostReport, GovernorError> {
+        governor_core::Classifier::cost_report(self).await
     }
 }
 
@@ -94,6 +102,7 @@ pub fn router<C: ClassifierLike>(state: AppState<C>) -> Router {
     Router::new()
         .route("/health", get(health))
         .route("/classify", post(classify::<C>))
+        .route("/cost", get(cost::<C>))
         .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::permissive())
         .with_state(state)
@@ -169,6 +178,22 @@ fn error_response(status: StatusCode, message: &str) -> Response {
         .into_response()
 }
 
+/// `GET /cost` — aggregate cumulative spend from the on-disk cache.
+///
+/// Returns counts + summed `estimated_cost_usd` rolled up by tier and by
+/// UTC day. Reflects only *cached* classifications — see
+/// [`governor_core::cost`] for caveats. Auth-gated like `/classify` when
+/// `state.api_key` is set.
+async fn cost<C: ClassifierLike>(State(state): State<AppState<C>>, headers: HeaderMap) -> Response {
+    if let Some(resp) = check_auth(&state, &headers) {
+        return resp;
+    }
+    match state.classifier.cost_report().await {
+        Ok(report) => (StatusCode::OK, Json(report)).into_response(),
+        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -181,18 +206,25 @@ mod tests {
     /// Stub classifier — returns whatever `Result` was queued at construction.
     struct FakeClassifier {
         result: Mutex<Option<Result<ClassifyResponse, GovernorError>>>,
+        cost: Mutex<Option<Result<CostReport, GovernorError>>>,
     }
 
     impl FakeClassifier {
         fn ok(resp: ClassifyResponse) -> Self {
             Self {
                 result: Mutex::new(Some(Ok(resp))),
+                cost: Mutex::new(None),
             }
         }
         fn err(e: GovernorError) -> Self {
             Self {
                 result: Mutex::new(Some(Err(e))),
+                cost: Mutex::new(None),
             }
+        }
+        fn with_cost(self, cost: Result<CostReport, GovernorError>) -> Self {
+            *self.cost.lock().expect("poisoned") = Some(cost);
+            self
         }
     }
 
@@ -203,7 +235,15 @@ mod tests {
                 .lock()
                 .expect("poisoned")
                 .take()
-                .expect("FakeClassifier called more than once")
+                .expect("FakeClassifier::classify called more than once")
+        }
+
+        async fn cost_report(&self) -> Result<CostReport, GovernorError> {
+            self.cost
+                .lock()
+                .expect("poisoned")
+                .take()
+                .unwrap_or_else(|| Ok(CostReport::default()))
         }
     }
 
@@ -408,6 +448,63 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn cost_returns_200_with_aggregation_shape() {
+        use governor_core::{DayTotals, TierTotals};
+        use std::collections::BTreeMap;
+
+        let mut by_tier = BTreeMap::new();
+        by_tier.insert(
+            Tier::Hk,
+            TierTotals {
+                count: 3,
+                total_usd: 0.06,
+            },
+        );
+        let report = CostReport {
+            by_tier,
+            by_day: BTreeMap::new(),
+            totals: DayTotals {
+                count: 3,
+                total_usd: 0.06,
+            },
+        };
+        let fake = FakeClassifier::ok(canned_response()).with_cost(Ok(report));
+        let app = router(AppState::new(fake, None));
+        let resp = app
+            .oneshot(Request::builder().uri("/cost").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = read_body(resp).await;
+        let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(v["totals"]["count"], 3);
+        assert_eq!(v["by_tier"]["hk"]["count"], 3);
+    }
+
+    #[tokio::test]
+    async fn cost_propagates_classifier_error_as_500() {
+        let fake = FakeClassifier::ok(canned_response())
+            .with_cost(Err(GovernorError::Cache("boom".into())));
+        let app = router(AppState::new(fake, None));
+        let resp = app
+            .oneshot(Request::builder().uri("/cost").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[tokio::test]
+    async fn cost_requires_auth_when_key_set() {
+        let fake = FakeClassifier::ok(canned_response());
+        let app = router(AppState::new(fake, Some("secret-key".into())));
+        let resp = app
+            .oneshot(Request::builder().uri("/cost").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[tokio::test]

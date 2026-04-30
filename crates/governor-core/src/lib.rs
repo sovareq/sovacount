@@ -26,6 +26,7 @@
 pub mod cache;
 pub mod classifier;
 pub mod config;
+pub mod cost;
 pub mod error;
 pub mod heuristic;
 pub mod prompt;
@@ -36,5 +37,6 @@ pub(crate) mod pricing;
 
 pub use classifier::Classifier;
 pub use config::Config;
+pub use cost::{CostReport, DayTotals, TierTotals};
 pub use error::{GovernorError, Result};
 pub use types::{AlternativeTier, ClassifyRequest, ClassifyResponse, Complexity, Tier};
