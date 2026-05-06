@@ -1,0 +1,17 @@
+id: governor-method-confusion
+
+info:
+  name: governor-http method confusion on POST endpoints
+  author: sovareq
+  severity: medium
+  tags: misconfig,api
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/classify"
+
+    matchers:
+      - type: status
+        status:
+          - 405

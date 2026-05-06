@@ -50,6 +50,14 @@ pub struct TierTotals {
     pub count: u64,
     /// Sum of `estimated_cost_usd` across those classifications.
     pub total_usd: f64,
+    /// What it *would* have cost if every call had used the most-expensive
+    /// tier (Opus-class), recomputed from each call's estimated input/output
+    /// token counts using the same per-1M-token rate table that produced
+    /// `total_usd`.
+    pub baseline_opus_usd: f64,
+    /// `baseline_opus_usd - total_usd`, never negative. The user's
+    /// always-Opus-versus-routed savings, in USD.
+    pub savings_usd: f64,
 }
 
 /// Per-day rollup: classification count + cumulative cost.
@@ -62,6 +70,11 @@ pub struct DayTotals {
     pub count: u64,
     /// Sum of `estimated_cost_usd` across those classifications.
     pub total_usd: f64,
+    /// What it *would* have cost if every call had used the most-expensive
+    /// tier (Opus-class). Same recomputation as `TierTotals.baseline_opus_usd`.
+    pub baseline_opus_usd: f64,
+    /// `baseline_opus_usd - total_usd`, never negative.
+    pub savings_usd: f64,
 }
 
 /// Aggregated cost report for a single cache directory.
@@ -80,7 +93,17 @@ pub struct CostReport {
 /// Returns an empty report when the directory does not exist or contains
 /// no usable entries — that is **not** an error, since a fresh install has
 /// no cache yet. Returns `Err` only on hard I/O failures.
-pub async fn aggregate(cache_dir: &Path) -> Result<CostReport> {
+///
+/// `provider` is used to compute the always-Opus baseline / savings using
+/// the *active* provider's rate-card, so an Anthropic-routed deployment
+/// reports Anthropic-Opus baselines and an OpenAI-routed one reports
+/// o1-baselines. Per-call `total_usd` values are kept verbatim from the
+/// cached `estimated_cost_usd`, which was already computed against the
+/// active provider when the response was first produced.
+pub async fn aggregate(
+    cache_dir: &Path,
+    provider: crate::pricing::PricingProvider,
+) -> Result<CostReport> {
     let mut report = CostReport::default();
 
     let mut entries = match fs::read_dir(cache_dir).await {
@@ -136,26 +159,48 @@ pub async fn aggregate(cache_dir: &Path) -> Result<CostReport> {
             .and_then(|m| m.modified().ok())
             .unwrap_or(SystemTime::now());
 
-        record(&mut report, &resp, mtime);
+        record(&mut report, &resp, mtime, provider);
     }
 
     Ok(report)
 }
 
 /// Add one [`ClassifyResponse`] into the running report.
-fn record(report: &mut CostReport, resp: &ClassifyResponse, mtime: SystemTime) {
+fn record(
+    report: &mut CostReport,
+    resp: &ClassifyResponse,
+    mtime: SystemTime,
+    provider: crate::pricing::PricingProvider,
+) {
     let cost = resp.estimated_cost_usd;
+
+    // Recompute "what if every call had been Opus" from the call's own
+    // input/output token estimates, using the same per-tier rate table.
+    let baseline = crate::pricing::estimate_cost_usd(
+        provider,
+        Tier::Op,
+        resp.estimated_input_tokens,
+        resp.estimated_output_tokens,
+    );
+    let savings = (baseline - cost).max(0.0);
+
     let tier_totals = report.by_tier.entry(resp.tier).or_default();
     tier_totals.count += 1;
     tier_totals.total_usd += cost;
+    tier_totals.baseline_opus_usd += baseline;
+    tier_totals.savings_usd += savings;
 
     let day_key = day_key_utc(mtime);
     let day_totals = report.by_day.entry(day_key).or_default();
     day_totals.count += 1;
     day_totals.total_usd += cost;
+    day_totals.baseline_opus_usd += baseline;
+    day_totals.savings_usd += savings;
 
     report.totals.count += 1;
     report.totals.total_usd += cost;
+    report.totals.baseline_opus_usd += baseline;
+    report.totals.savings_usd += savings;
 }
 
 /// Format a `SystemTime` as `YYYY-MM-DD` in UTC.
@@ -243,7 +288,9 @@ mod tests {
     #[tokio::test]
     async fn aggregate_empty_dir_returns_empty_report() {
         let tmp = TempDir::new().unwrap();
-        let r = aggregate(tmp.path()).await.unwrap();
+        let r = aggregate(tmp.path(), crate::pricing::PricingProvider::Anthropic)
+            .await
+            .unwrap();
         assert_eq!(r.totals.count, 0);
         assert!(r.by_tier.is_empty());
         assert!(r.by_day.is_empty());
@@ -253,7 +300,9 @@ mod tests {
     async fn aggregate_missing_dir_returns_empty_report() {
         let tmp = TempDir::new().unwrap();
         let missing = tmp.path().join("does-not-exist");
-        let r = aggregate(&missing).await.unwrap();
+        let r = aggregate(&missing, crate::pricing::PricingProvider::Anthropic)
+            .await
+            .unwrap();
         assert_eq!(r.totals.count, 0);
     }
 
@@ -265,7 +314,9 @@ mod tests {
         write_resp(tmp.path(), "c", &make_resp(Tier::So, 0.10)).await;
         write_resp(tmp.path(), "d", &make_resp(Tier::Op, 0.50)).await;
 
-        let r = aggregate(tmp.path()).await.unwrap();
+        let r = aggregate(tmp.path(), crate::pricing::PricingProvider::Anthropic)
+            .await
+            .unwrap();
         assert_eq!(r.totals.count, 4);
         assert!((r.totals.total_usd - 0.63).abs() < 1e-9);
 
@@ -297,7 +348,9 @@ mod tests {
             .await
             .unwrap();
 
-        let r = aggregate(tmp.path()).await.unwrap();
+        let r = aggregate(tmp.path(), crate::pricing::PricingProvider::Anthropic)
+            .await
+            .unwrap();
         assert_eq!(r.totals.count, 1, "only the real entry should count");
     }
 
@@ -305,8 +358,25 @@ mod tests {
     async fn aggregate_serializes_with_lowercase_tier_keys() {
         let tmp = TempDir::new().unwrap();
         write_resp(tmp.path(), "a", &make_resp(Tier::Hk, 0.01)).await;
-        let r = aggregate(tmp.path()).await.unwrap();
+        let r = aggregate(tmp.path(), crate::pricing::PricingProvider::Anthropic)
+            .await
+            .unwrap();
         let json = serde_json::to_value(&r).unwrap();
         assert!(json["by_tier"]["hk"].is_object(), "got: {json}");
+    }
+
+    #[tokio::test]
+    async fn aggregate_baseline_uses_passed_provider() {
+        // Same calls aggregated under Ollama (zero-cost rate-card) must
+        // yield zero baseline / zero savings, regardless of cached
+        // `estimated_cost_usd` values that were originally computed against
+        // some other rate-card.
+        let tmp = TempDir::new().unwrap();
+        write_resp(tmp.path(), "a", &make_resp(Tier::Hk, 0.01)).await;
+        let r = aggregate(tmp.path(), crate::pricing::PricingProvider::Ollama)
+            .await
+            .unwrap();
+        assert_eq!(r.totals.baseline_opus_usd, 0.0);
+        assert_eq!(r.totals.savings_usd, 0.0);
     }
 }

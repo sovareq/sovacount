@@ -1,0 +1,31 @@
+id: governor-version-disclosure
+
+info:
+  name: governor-http health endpoint information disclosure
+  author: sovareq
+  severity: info
+  tags: exposure,api
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/health"
+
+    matchers-condition: or
+    matchers:
+      - type: word
+        name: hostname-leak
+        words:
+          - "/Users/"
+          - "/home/"
+          - ".local"
+          - "CARGO"
+          - "PATH="
+
+      - type: word
+        name: env-leak
+        words:
+          - "ANTHROPIC"
+          - "OPENAI"
+          - "API_KEY"
+          - "SECRET"

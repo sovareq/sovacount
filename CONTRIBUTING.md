@@ -10,7 +10,7 @@ in `rust-toolchain.toml`; rustup will pick it up automatically.
 
 ```bash
 # Clone and build (debug)
-git clone https://github.com/brainzzlab-hub/token-governor.git
+git clone https://github.com/sovareq/token-governor.git
 cd token-governor
 cargo build --workspace
 
@@ -116,4 +116,4 @@ To add a backend:
 
 GitHub issues are the right place. For security-sensitive findings, please
 follow [SECURITY.md](SECURITY.md) (TBD; for now email
-`brainzzlab@gmail.com`).
+`bjorn@sovareq.com`).

@@ -1,0 +1,34 @@
+id: governor-shift-out-of-range
+
+info:
+  name: governor-http shift out-of-range clamping
+  author: sovareq
+  severity: medium
+  tags: api,robustness
+
+http:
+  - method: POST
+    path:
+      - "{{BaseURL}}/shift"
+
+    headers:
+      Content-Type: application/json
+
+    payloads:
+      value:
+        - '{"value": 9999}'
+        - '{"value": -9999}'
+        - '{"value": 2.5}'
+        - '{"value": "up"}'
+        - '{"value": null}'
+
+    body: "{{value}}"
+
+    attack: batteringram
+
+    matchers:
+      - type: status
+        status:
+          - 200  # in-range / clamped: correct
+          - 400  # type-error (string/null): correct rejection
+          - 422  # axum unprocessable entity (float voor i32): correct rejection

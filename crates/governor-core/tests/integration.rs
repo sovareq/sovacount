@@ -25,6 +25,8 @@ async fn end_to_end_classify_then_cache_hit() {
         estimated_loc: Some(150),
         estimated_files: Some(2),
         no_cache: false,
+
+        shift: 0,
     };
 
     // First call → live (mock), no cache.
@@ -53,6 +55,8 @@ async fn end_to_end_hk_via_fast_path() {
         estimated_loc: Some(5),
         estimated_files: Some(1),
         no_cache: false,
+
+        shift: 0,
     };
     let resp = cls.classify(req).await.unwrap();
     assert_eq!(resp.tier, Tier::Hk);
@@ -73,6 +77,8 @@ async fn end_to_end_op_via_fast_path() {
         estimated_loc: Some(800),
         estimated_files: Some(20),
         no_cache: false,
+
+        shift: 0,
     };
     let resp = cls.classify(req).await.unwrap();
     assert_eq!(resp.tier, Tier::Op);
@@ -91,6 +97,8 @@ async fn no_cache_flag_forces_fresh_call() {
         estimated_loc: Some(150),
         estimated_files: Some(2),
         no_cache: false,
+
+        shift: 0,
     };
 
     // Prime the cache.

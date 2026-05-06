@@ -1,0 +1,28 @@
+id: governor-path-traversal
+
+info:
+  name: governor-http path traversal attempt
+  author: sovareq
+  severity: critical
+  tags: traversal,lfi
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/../etc/passwd"
+      - "{{BaseURL}}/%2e%2e%2fetc%2fpasswd"
+      - "{{BaseURL}}/..%2F..%2Fetc%2Fpasswd"
+      - "{{BaseURL}}////etc/passwd"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 404   # geroute-d weg, geen LFI
+          - 400   # geweigerd door request-parser
+
+      - type: word
+        negative: true
+        words:
+          - "root:"
+          - "/bin/bash"

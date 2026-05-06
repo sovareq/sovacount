@@ -15,6 +15,7 @@
 //!     estimated_loc: Some(50),
 //!     estimated_files: Some(1),
 //!     no_cache: false,
+//!     shift: 0,
 //! }).await?;
 //! println!("{}", resp.tier);
 //! # Ok(()) }
@@ -29,14 +30,14 @@ pub mod config;
 pub mod cost;
 pub mod error;
 pub mod heuristic;
+pub mod pricing;
 pub mod prompt;
 pub mod providers;
 pub mod types;
-
-pub(crate) mod pricing;
 
 pub use classifier::Classifier;
 pub use config::Config;
 pub use cost::{CostReport, DayTotals, TierTotals};
 pub use error::{GovernorError, Result};
+pub use pricing::{PricingConfig, PricingProvider, ProviderRates, TierRates};
 pub use types::{AlternativeTier, ClassifyRequest, ClassifyResponse, Complexity, Tier};

@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# SovaCount launcher — start governor-http in mock of live modus
+set -euo pipefail
+
+# CODE_DIR is twee niveaus boven de .app/Contents/MacOS/-map:
+#   .../code/LAUNCHER/SovaCount.app/Contents/MacOS/sovacount-launcher
+#   →  CODE_DIR = .../code
+CODE_DIR="$(cd "$(dirname "$0")/../../../.." && pwd)"
+
+# Bouw binary als die er niet is
+if [[ ! -f "$CODE_DIR/target/release/governor-http" ]]; then
+  osascript -e 'display notification "SovaCount wordt gebouwd..." with title "SovaCount"'
+  cd "$CODE_DIR" && cargo build -p governor-http --release
+fi
+
+# Start de server
+export GOVERNOR_PROVIDER="${GOVERNOR_PROVIDER:-mock}"
+export GOVERNOR_HTTP_BIND="${GOVERNOR_HTTP_BIND:-127.0.0.1:8989}"
+
+osascript -e "display notification \"Draait op $GOVERNOR_HTTP_BIND\" with title \"SovaCount\""
+
+exec "$CODE_DIR/target/release/governor-http"

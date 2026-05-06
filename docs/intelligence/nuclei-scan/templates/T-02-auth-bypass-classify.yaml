@@ -1,0 +1,24 @@
+id: governor-classify-auth
+
+info:
+  name: governor-http classify endpoint auth check
+  author: sovareq
+  severity: high
+  tags: auth,api
+
+http:
+  - method: POST
+    path:
+      - "{{BaseURL}}/classify"
+
+    headers:
+      Content-Type: application/json
+
+    body: '{"task_id":"nuclei-auth-test","scope_md":"test"}'
+
+    matchers:
+      - type: status
+        status:
+          - 200   # mock-mode zonder auth: correct
+          - 401   # auth ingeschakeld zonder/verkeerd token: correct
+        # FAIL als server iets anders geeft (500, 403, 502, ...)

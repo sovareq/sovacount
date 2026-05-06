@@ -79,6 +79,8 @@ fn sample_params() -> ClassifyParams {
         estimated_loc: Some(220),
         estimated_files: Some(3),
         no_cache: false,
+
+        shift: 0,
     }
 }
 

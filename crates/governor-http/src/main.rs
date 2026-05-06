@@ -14,7 +14,8 @@
 use anyhow::{Context, Result};
 use clap::Parser;
 use governor_core::{Classifier, Config};
-use governor_http::{AppState, router};
+use governor_http::{AppState, ClassifyJob, router};
+use tokio::sync::mpsc;
 use tracing_subscriber::{EnvFilter, fmt};
 
 const DEFAULT_BIND: &str = "127.0.0.1:8989";
@@ -67,7 +68,32 @@ async fn main() -> Result<()> {
         .context("failed to build classifier")?;
 
     let auth_label = if api_key.is_some() { "on" } else { "off" };
+
+    // Bouw eerst de state, lees de classifier-Arc voor de worker, voeg dan
+    // de queue toe. Dit houdt het classifier-eigendom op één plek (AppState)
+    // en geeft de worker een gedeelde Arc-clone.
     let state = AppState::new(classifier, api_key);
+
+    let queue_depth: usize = std::env::var("CLASSIFY_QUEUE_DEPTH")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(512);
+
+    let (classify_tx, mut classify_rx) = mpsc::channel::<ClassifyJob>(queue_depth);
+
+    // Worker-task: serialiseert classify-calls, één tegelijk. De HTTP-handler
+    // wacht op het resultaat via een oneshot-channel — handlers blijven
+    // non-blocking. `reply.send` faalt alleen als de handler al weg is
+    // (timeout, cancelled request); dat negeren we expres.
+    let worker_classifier = state.classifier_arc();
+    tokio::spawn(async move {
+        while let Some(job) = classify_rx.recv().await {
+            let result = worker_classifier.classify(job.req).await;
+            let _ = job.reply.send(result);
+        }
+    });
+
+    let state = state.with_queue(classify_tx);
     let app = router(state);
 
     let listener = tokio::net::TcpListener::bind(&bind)

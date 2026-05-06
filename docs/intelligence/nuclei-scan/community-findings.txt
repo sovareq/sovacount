@@ -1,0 +1,14 @@
+[email-extractor] [http] [info] http://127.0.0.1:8989 ["bjorn@sovareq.com"]
+[http-missing-security-headers:permissions-policy] [http] [info] http://127.0.0.1:8989
+[http-missing-security-headers:x-frame-options] [http] [info] http://127.0.0.1:8989
+[http-missing-security-headers:x-content-type-options] [http] [info] http://127.0.0.1:8989
+[http-missing-security-headers:x-permitted-cross-domain-policies] [http] [info] http://127.0.0.1:8989
+[http-missing-security-headers:referrer-policy] [http] [info] http://127.0.0.1:8989
+[http-missing-security-headers:clear-site-data] [http] [info] http://127.0.0.1:8989
+[http-missing-security-headers:cross-origin-embedder-policy] [http] [info] http://127.0.0.1:8989
+[http-missing-security-headers:content-security-policy] [http] [info] http://127.0.0.1:8989
+[http-missing-security-headers:cross-origin-opener-policy] [http] [info] http://127.0.0.1:8989
+[http-missing-security-headers:cross-origin-resource-policy] [http] [info] http://127.0.0.1:8989
+[http-missing-security-headers:missing-content-type] [http] [info] http://127.0.0.1:8989
+[http-missing-security-headers:strict-transport-security] [http] [info] http://127.0.0.1:8989
+[options-method] [http] [info] http://127.0.0.1:8989 ["GET,HEAD"]

@@ -29,6 +29,35 @@ impl Tier {
             Tier::Hk => "@hk",
         }
     }
+
+    /// Integer capability-level. Higher = more capable (and more expensive).
+    /// `Hk = 0`, `So = 1`, `Op = 2`. Pairs with [`Tier::from_level`] for
+    /// applying user shift overrides.
+    pub fn level(&self) -> i32 {
+        match self {
+            Tier::Hk => 0,
+            Tier::So => 1,
+            Tier::Op => 2,
+        }
+    }
+
+    /// Resolve a tier from an integer level. Out-of-range values clamp to
+    /// the nearest endpoint (`<0 → Hk`, `>2 → Op`).
+    pub fn from_level(level: i32) -> Self {
+        match level.clamp(0, 2) {
+            0 => Tier::Hk,
+            1 => Tier::So,
+            _ => Tier::Op,
+        }
+    }
+
+    /// Apply a user shift to this tier. `+1` = upshift (more capable),
+    /// `-1` = downshift (cheaper). Result is clamped to the available range
+    /// — shifting beyond the endpoints is a no-op rather than an error so
+    /// callers don't need to know the tier-count.
+    pub fn shifted(&self, shift: i32) -> Self {
+        Self::from_level(self.level() + shift)
+    }
 }
 
 impl std::fmt::Display for Tier {
@@ -77,6 +106,14 @@ pub struct ClassifyRequest {
     /// If `true`, governor must skip cache lookup for this request.
     #[serde(default)]
     pub no_cache: bool,
+
+    /// User-requested tier-shift on top of the classifier's recommendation.
+    /// `+1` = upshift (one tier more capable), `-1` = downshift, `0` =
+    /// honour the classifier exactly. Out-of-range values clamp to the
+    /// nearest endpoint. Shift is applied *after* cache lookup so cached
+    /// recommendations stay shift-agnostic.
+    #[serde(default)]
+    pub shift: i32,
 }
 
 /// One alternative tier the classifier considered but did not pick as primary.
@@ -171,5 +208,52 @@ mod tests {
         assert!(r.ssot_refs.is_empty());
         assert!(r.estimated_loc.is_none());
         assert!(!r.no_cache);
+        assert_eq!(r.shift, 0);
+    }
+
+    #[test]
+    fn tier_levels_are_monotonic() {
+        assert!(Tier::Hk.level() < Tier::So.level());
+        assert!(Tier::So.level() < Tier::Op.level());
+    }
+
+    #[test]
+    fn tier_from_level_roundtrips() {
+        for t in [Tier::Hk, Tier::So, Tier::Op] {
+            assert_eq!(Tier::from_level(t.level()), t);
+        }
+    }
+
+    #[test]
+    fn tier_from_level_clamps_out_of_range() {
+        assert_eq!(Tier::from_level(-99), Tier::Hk);
+        assert_eq!(Tier::from_level(99), Tier::Op);
+    }
+
+    #[test]
+    fn tier_shifted_upshift_increases_capability() {
+        assert_eq!(Tier::Hk.shifted(1), Tier::So);
+        assert_eq!(Tier::So.shifted(1), Tier::Op);
+        assert_eq!(Tier::Op.shifted(1), Tier::Op, "upshift past Op clamps");
+    }
+
+    #[test]
+    fn tier_shifted_downshift_decreases_capability() {
+        assert_eq!(Tier::Op.shifted(-1), Tier::So);
+        assert_eq!(Tier::So.shifted(-1), Tier::Hk);
+        assert_eq!(Tier::Hk.shifted(-1), Tier::Hk, "downshift past Hk clamps");
+    }
+
+    #[test]
+    fn tier_shifted_zero_is_identity() {
+        for t in [Tier::Hk, Tier::So, Tier::Op] {
+            assert_eq!(t.shifted(0), t);
+        }
+    }
+
+    #[test]
+    fn tier_shifted_far_clamps_at_endpoints() {
+        assert_eq!(Tier::Hk.shifted(99), Tier::Op);
+        assert_eq!(Tier::Op.shifted(-99), Tier::Hk);
     }
 }

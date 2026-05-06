@@ -1,0 +1,12 @@
+{
+  "name": "sovacount-browser-tests",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Playwright browser-suite voor governor-http dashboard. Dev-tooling, niet gecoupled aan de Rust-build.",
+  "scripts": {
+    "test:browser": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0"
+  }
+}

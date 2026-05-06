@@ -1,12 +1,14 @@
 # Token Governor
 
-> **Cost-optimizing classifier for AI-agent tasks. Tags work with `@op` / `@so` / `@hk` so cheaper models handle simpler work. Saves 40–70 % on LLM API bills.**
+> **Cost-optimizing classifier for AI-agent tasks. Tags work with `@op` / `@so` / `@hk` so cheaper models handle simpler work.**
+
+> **Externe naam:** SovaCount. De interne module-naam is `token-governor` /
+> `governor-*` en wordt zo behouden in alle Rust-crates en binary-namen.
 
 Most agentic tools call the same expensive model for every task — even when the
 work is a typo-fix that any cheap model could handle. Token Governor sits in
 front of an agent and decides, *per task*, whether `@op` (Opus-class), `@so`
-(Sonnet-class) or `@hk` (Haiku-class) is enough. Real public benchmarks put
-the savings at **40–70 %** of the LLM bill with no measurable quality drop.
+(Sonnet-class) or `@hk` (Haiku-class) is enough.
 
 It is **agent-agnostic by design**. It does not assume Anthropic, Claude Code,
 or any specific runtime. There are three integration paths — pick whichever
@@ -69,7 +71,7 @@ tokens exploring the task.
 Requires Rust 1.94+ (`rustup install stable`).
 
 ```bash
-git clone https://github.com/brainzzlab-hub/token-governor.git
+git clone https://github.com/sovareq/token-governor.git
 cd token-governor
 cargo install --path crates/governor-cli      # tier-classify
 cargo install --path crates/governor-http     # governor-http
@@ -184,7 +186,7 @@ Default mappings per provider:
 ## Tag convention
 
 The `@op` / `@so` / `@hk` (and `@auto`) tags are part of a wider
-[Sovareq tag-convention](https://github.com/brainzzlab-hub/token-governor/blob/main/PLAN.md);
+Sovareq tag-convention;
 they may also be written long-form (`@opus` / `@sonnet` / `@haiku`).
 
 ## Roadmap
@@ -192,7 +194,7 @@ they may also be written long-form (`@opus` / `@sonnet` / `@haiku`).
 - [ ] V0.1.0 release with binaries via cargo-dist
 - [ ] Brew tap for one-line install
 - [ ] Streaming-classifier mode (large-batch tranche-files)
-- [ ] Built-in cost-tracker dashboard (`governor-http /cost`)
+- [x] Built-in cost-tracker dashboard (`governor-http /cost` + `/` UI)
 - [ ] Native Python and TypeScript SDKs that wrap the HTTP API
 - [ ] First-class Codex / Cursor / Continue.dev plugins
 
@@ -201,4 +203,4 @@ they may also be written long-form (`@opus` / `@sonnet` / `@haiku`).
 See [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup, build/test commands and
 the PR checklist. Forbid-unsafe-code, MIT-licensed, MSRV 1.94.
 
-Built by [Sovareq BV](https://sovareq.example) · [@brainzzlab-hub](https://github.com/brainzzlab-hub).
+Built by [Sovareq BV](https://sovareq.example) · [@sovareq](https://github.com/sovareq).

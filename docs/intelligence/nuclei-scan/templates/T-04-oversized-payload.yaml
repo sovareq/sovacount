@@ -1,0 +1,34 @@
+id: governor-oversized-payload
+
+info:
+  name: governor-http oversized JSON payload handling
+  author: sovareq
+  severity: high
+  tags: dos,api
+
+# De `{{repeat()}}`-helper werkt niet in deze Nuclei-versie. Daarom wordt
+# de 1 MB JSON-body uit een vooraf gegenereerd bestand geladen via Nuclei's
+# payloads-from-file mechanisme (één regel = één payload, file bevat één
+# enkele >1 MB JSON-regel).
+
+http:
+  - method: POST
+    path:
+      - "{{BaseURL}}/classify"
+
+    headers:
+      Content-Type: application/json
+
+    payloads:
+      body_payload: docs/intelligence/nuclei-scan/payloads/oversize_body.json
+
+    body: "{{body_payload}}"
+
+    attack: batteringram
+
+    matchers:
+      - type: status
+        status:
+          - 400  # bad request (deserialize-error voor truncated JSON)
+          - 413  # payload too large (axum DefaultBodyLimit overschreden)
+          - 200  # axum DefaultBodyLimit 2 MB; 1 MB past erdoor en mock geeft tier

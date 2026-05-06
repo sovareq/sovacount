@@ -67,6 +67,17 @@ struct Cli {
     #[arg(long)]
     no_cache: bool,
 
+    /// Tier-shift on top of the classifier's recommendation.
+    /// `+1` = upshift (one tier more capable), `-1` = downshift, `0` =
+    /// honour the recommendation. Out-of-range values clamp.
+    #[arg(
+        long,
+        value_name = "N",
+        default_value_t = 0,
+        allow_hyphen_values = true
+    )]
+    shift: i32,
+
     /// Override `GOVERNOR_PROVIDER`.
     #[arg(long, value_name = "KIND", value_enum)]
     provider: Option<ProviderArg>,
@@ -154,6 +165,7 @@ async fn run() -> Result<()> {
         estimated_loc: cli.loc_est,
         estimated_files: cli.files_est,
         no_cache: cli.no_cache,
+        shift: cli.shift,
     };
 
     let resp = classifier

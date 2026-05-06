@@ -1,0 +1,30 @@
+id: governor-security-headers
+
+info:
+  name: governor-http missing security headers
+  author: sovareq
+  severity: medium
+  tags: headers,misconfig
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/"
+      - "{{BaseURL}}/health"
+
+    matchers-condition: or
+    matchers:
+      - type: dsl
+        name: missing-x-content-type-options
+        dsl:
+          - "!contains(tolower(all_headers), 'x-content-type-options')"
+
+      - type: dsl
+        name: missing-x-frame-options
+        dsl:
+          - "!contains(tolower(all_headers), 'x-frame-options')"
+
+      - type: dsl
+        name: missing-content-security-policy
+        dsl:
+          - "!contains(tolower(all_headers), 'content-security-policy')"

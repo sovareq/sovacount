@@ -1,0 +1,698 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>SovaCount — token-governor dashboard</title>
+<style>
+  /* SovaCount dashboard — token-set 1:1 gespiegeld op YuniTrack/Sovaguard
+   * (zie ssot/ux_style.md in yunitrack-rs). Geen rauwe hex buiten :root.
+   * Geen externe CDN, geen woff2-fetch — fallback-stack volstaat.
+   */
+  :root {
+    --color-ink: #14181f;
+    --color-ink-muted: #363e4c;
+    --color-ink-subtle: #6b7280;
+    --color-surface: #ffffff;
+    --color-surface-muted: #f5f5f7;
+    --color-surface-sunken: #eceff3;
+    --color-surface-subtle: #f8f9fb;
+    --color-border: #e5e7eb;
+    --color-border-strong: #d1d5db;
+    --color-accent: #0052c8;
+    --color-accent-hover: #003f99;
+    --color-accent-soft: #1a5cff;
+    --color-focus: var(--color-accent);
+    --color-danger: #b91c1c;
+    --color-success: #14a84e;
+
+    --font-sans: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --text-xs: 12px;
+    --text-sm: 14px;
+    --text-base: 16px;
+    --text-lg: 18px;
+    --text-2xl: 32px;
+
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-8: 32px;
+    --space-10: 40px;
+    --space-12: 48px;
+
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+
+    --border-thin: 1px solid var(--color-border);
+    --border-strong: 2px solid var(--color-ink);
+
+    --container-max: 1200px;
+    --grid-gap: var(--space-5);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --color-ink: #f3f4f6;
+      --color-ink-muted: #9ca3af;
+      --color-ink-subtle: #6b7280;
+      --color-surface: #0f1011;
+      --color-surface-muted: #18191c;
+      --color-surface-sunken: #0b0c0d;
+      --color-surface-subtle: #1a1b1e;
+      --color-border: #2d2f34;
+      --color-border-strong: #4b4f58;
+      --color-accent: #4d8bff;
+      --color-accent-hover: #80a7ff;
+      --color-accent-soft: #6698ff;
+      --color-focus: var(--color-accent);
+      --color-danger: #f87171;
+      --color-success: #4ade80;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    background: var(--color-surface);
+    color: var(--color-ink);
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+
+  header {
+    border-bottom: var(--border-thin);
+    padding: var(--space-6) var(--space-8);
+    background: var(--color-surface);
+  }
+  header h1 {
+    margin: 0;
+    font-size: var(--text-lg);
+    font-weight: 600;
+    color: var(--color-ink);
+  }
+  header .sub {
+    color: var(--color-ink-muted);
+    font-size: var(--text-xs);
+    margin-top: var(--space-1);
+  }
+  header .sub a {
+    color: var(--color-accent);
+    text-decoration: none;
+  }
+  header .sub a:hover {
+    color: var(--color-accent-hover);
+    text-decoration: underline;
+  }
+
+  main {
+    max-width: var(--container-max);
+    margin: 0 auto;
+    padding: var(--space-6) var(--space-8);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--grid-gap);
+  }
+  .full { grid-column: 1 / -1; }
+
+  .card {
+    background: var(--color-surface-muted);
+    border: var(--border-thin);
+    border-radius: var(--radius-md);
+    padding: var(--space-5);
+  }
+  .card h2 {
+    margin: 0 0 var(--space-3) 0;
+    font-size: var(--text-sm);
+    color: var(--color-ink-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+  }
+
+  .savings-box {
+    background: var(--color-surface-sunken);
+    border: 2px solid var(--color-accent);
+  }
+  .savings-amount {
+    font-family: var(--font-mono);
+    font-size: var(--text-2xl);
+    font-weight: 700;
+    color: var(--color-accent);
+    margin: var(--space-2) 0 var(--space-1) 0;
+  }
+  .savings-context {
+    color: var(--color-ink-muted);
+    font-size: var(--text-sm);
+  }
+
+  .stat-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: var(--space-3);
+    margin-top: var(--space-2);
+  }
+  .stat {
+    background: var(--color-surface);
+    padding: var(--space-3);
+    border-radius: var(--radius-sm);
+    border: var(--border-thin);
+  }
+  .stat-label {
+    color: var(--color-ink-muted);
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-family: var(--font-mono);
+  }
+  .stat-value {
+    font-family: var(--font-mono);
+    font-size: var(--text-lg);
+    font-weight: 600;
+    margin-top: var(--space-1);
+    color: var(--color-ink);
+  }
+
+  .tier-hk { color: var(--color-accent); }
+  .tier-so { color: var(--color-ink-muted); }
+  .tier-op { color: var(--color-border-strong); }
+
+  .shift-bar {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: var(--space-2);
+    margin-top: var(--space-3);
+  }
+  .shift-btn {
+    background: var(--color-surface);
+    border: var(--border-thin);
+    color: var(--color-ink);
+    padding: var(--space-3);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: var(--text-base);
+    font-family: var(--font-sans);
+    text-align: center;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .shift-btn:hover {
+    border: var(--border-strong);
+  }
+  .shift-btn.active {
+    background: var(--color-accent);
+    color: var(--color-surface);
+    border-color: var(--color-accent);
+    font-weight: 600;
+  }
+  .shift-btn .arrow {
+    font-size: var(--text-lg);
+    display: block;
+    font-family: var(--font-mono);
+  }
+  .shift-btn .label {
+    font-size: var(--text-xs);
+    color: var(--color-ink-muted);
+    margin-top: var(--space-1);
+    font-family: var(--font-mono);
+  }
+  .shift-btn.active .label {
+    color: var(--color-surface);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: var(--space-2);
+  }
+  th, td {
+    text-align: left;
+    padding: var(--space-2) var(--space-3);
+    border-bottom: var(--border-thin);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+  }
+  th {
+    color: var(--color-ink-muted);
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+    font-family: var(--font-sans);
+  }
+  td.num { text-align: right; }
+  .empty {
+    color: var(--color-ink-muted);
+    font-style: italic;
+    padding: var(--space-6) 0;
+    text-align: center;
+    font-family: var(--font-sans);
+  }
+
+  .health-pill {
+    display: inline-block;
+    padding: 2px var(--space-3);
+    border-radius: 999px;
+    font-size: var(--text-xs);
+    font-weight: 600;
+    font-family: var(--font-mono);
+  }
+  .health-ok {
+    background: var(--color-surface-sunken);
+    color: var(--color-accent);
+    border: var(--border-thin);
+  }
+  .health-down {
+    background: var(--color-surface-muted);
+    color: var(--color-ink);
+    border: 1px solid var(--color-ink);
+  }
+
+  footer {
+    text-align: center;
+    color: var(--color-ink-muted);
+    font-size: var(--text-sm);
+    padding: var(--space-6);
+    border-top: var(--border-thin);
+    margin-top: var(--space-6);
+  }
+  footer a {
+    color: var(--color-accent);
+    text-decoration: none;
+  }
+  footer a:hover {
+    color: var(--color-accent-hover);
+    text-decoration: underline;
+  }
+  footer code {
+    font-family: var(--font-mono);
+    background: var(--color-surface-muted);
+    padding: 2px var(--space-2);
+    border-radius: var(--radius-sm);
+  }
+
+  /* ---- Classify panel (sectie 2) ---- */
+  #classify-panel form {
+    display: grid;
+    gap: var(--space-3);
+    margin-top: var(--space-3);
+  }
+  #classify-panel .panel-intro {
+    color: var(--color-ink-muted);
+    font-size: var(--text-sm);
+    margin: 0 0 var(--space-2) 0;
+  }
+  #classify-panel textarea {
+    font-family: var(--font-sans);
+    font-size: var(--text-sm);
+    background: var(--color-surface);
+    color: var(--color-ink);
+    border: var(--border-thin);
+    border-radius: var(--radius-sm);
+    padding: var(--space-3);
+    resize: vertical;
+    min-height: 90px;
+  }
+  #classify-panel input[type="number"] {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    background: var(--color-surface);
+    color: var(--color-ink);
+    border: var(--border-thin);
+    border-radius: var(--radius-sm);
+    padding: var(--space-2) var(--space-3);
+    width: 100%;
+  }
+  #classify-panel textarea:focus,
+  #classify-panel input:focus {
+    outline: none;
+    border-color: var(--color-focus);
+  }
+  #classify-panel .panel-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-3);
+  }
+  #classify-panel button {
+    background: var(--color-accent);
+    color: var(--color-surface);
+    border: var(--border-thin);
+    border-color: var(--color-accent);
+    border-radius: var(--radius-sm);
+    padding: var(--space-3) var(--space-6);
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    font-weight: 600;
+    cursor: pointer;
+    justify-self: start;
+  }
+  #classify-panel button:hover:not(:disabled) {
+    background: var(--color-accent-hover);
+    border-color: var(--color-accent-hover);
+  }
+  #classify-panel button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+  #classify-result {
+    margin-top: var(--space-4);
+    padding: var(--space-4);
+    background: var(--color-surface);
+    border: var(--border-thin);
+    border-radius: var(--radius-sm);
+    display: grid;
+    gap: var(--space-2);
+  }
+  .result-tier {
+    background: var(--color-accent);
+    color: var(--color-surface);
+    border-radius: var(--radius-lg);
+    padding: var(--space-2) var(--space-6);
+    font-family: var(--font-mono);
+    font-size: var(--text-2xl);
+    font-weight: 700;
+    justify-self: start;
+  }
+  .result-model {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    color: var(--color-ink-muted);
+  }
+  .result-rationale {
+    color: var(--color-ink);
+    font-size: var(--text-base);
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .result-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: var(--text-sm);
+    color: var(--color-ink-muted);
+    font-family: var(--font-mono);
+  }
+  #res-confidence { font-weight: 600; }
+  #res-cache {
+    background: var(--color-surface-muted);
+    border: var(--border-thin);
+    padding: 2px var(--space-2);
+    border-radius: var(--radius-sm);
+    font-size: var(--text-xs);
+  }
+  .result-error {
+    margin-top: var(--space-4);
+    padding: var(--space-3) var(--space-4);
+    background: var(--color-surface);
+    border: 1px solid var(--color-ink);
+    border-radius: var(--radius-sm);
+    color: var(--color-ink);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>SovaCount <span class="health-pill health-ok" id="health">●</span></h1>
+  <div class="sub">
+    token-governor dashboard ·
+    <a href="https://sovareq.com" target="_blank">sovareq.com</a> ·
+    <a href="mailto:bjorn@sovareq.com">bjorn@sovareq.com</a>
+  </div>
+</header>
+
+<main>
+  <section class="card savings-box full">
+    <h2>Bespaard t.o.v. altijd-Opus</h2>
+    <div class="savings-amount" id="savings">—</div>
+    <div class="savings-context" id="savings-context">Wachten op data…</div>
+  </section>
+
+  <section class="card">
+    <h2>Per tier</h2>
+    <div class="stat-grid">
+      <div class="stat">
+        <div class="stat-label tier-hk">Haiku (hk)</div>
+        <div class="stat-value tier-hk" id="tier-hk-count">0</div>
+        <div class="stat-label" id="tier-hk-cost">$0.00</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label tier-so">Sonnet (so)</div>
+        <div class="stat-value tier-so" id="tier-so-count">0</div>
+        <div class="stat-label" id="tier-so-cost">$0.00</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label tier-op">Opus (op)</div>
+        <div class="stat-value tier-op" id="tier-op-count">0</div>
+        <div class="stat-label" id="tier-op-cost">$0.00</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Tier-shift (gear-lever)</h2>
+    <p style="color: var(--color-ink-muted); font-size: var(--text-sm); margin: 0;">
+      Forceert globaal één tier op of af. ▲ = duurder/beter. ▼ = goedkoper.
+    </p>
+    <div class="shift-bar">
+      <button class="shift-btn" data-shift="-1" title="Eén tier omlaag">
+        <span class="arrow">▼</span><span class="label">goedkoper (-1)</span>
+      </button>
+      <button class="shift-btn" data-shift="0" title="Geen shift">
+        <span class="arrow">●</span><span class="label">neutraal (0)</span>
+      </button>
+      <button class="shift-btn" data-shift="1" title="Eén tier omhoog">
+        <span class="arrow">▲</span><span class="label">duurder (+1)</span>
+      </button>
+    </div>
+  </section>
+
+  <section class="card full">
+    <h2>Cumulatief (totaal)</h2>
+    <div class="stat-grid">
+      <div class="stat">
+        <div class="stat-label">Calls</div>
+        <div class="stat-value" id="totals-count">0</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Werkelijk uitgegeven</div>
+        <div class="stat-value" id="totals-cost">$0.00</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Baseline (alles Opus)</div>
+        <div class="stat-value" id="totals-baseline">$0.00</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card full">
+    <h2>Per dag</h2>
+    <table id="by-day-table">
+      <thead><tr><th>Datum (UTC)</th><th class="num">Calls</th><th class="num">Kost</th><th class="num">Bespaard</th></tr></thead>
+      <tbody id="by-day-body"><tr><td colspan="4" class="empty">Nog geen calls gecached</td></tr></tbody>
+    </table>
+  </section>
+
+  <section class="card full" id="classify-panel">
+    <h2>Classify een taak</h2>
+    <p class="panel-intro">
+      Direct LLM-classify-call vanuit het dashboard. Geen auto-trigger; klik op de knop om een classify-call te starten.
+    </p>
+    <form id="classify-form">
+      <textarea id="cf-scope" rows="4" placeholder="Beschrijf de taak (markdown mag)" required></textarea>
+      <div class="panel-row">
+        <input id="cf-loc" type="number" min="0" placeholder="Geschatte LOC (optioneel)" />
+        <input id="cf-files" type="number" min="0" placeholder="Geschatte bestanden (optioneel)" />
+      </div>
+      <button id="cf-submit" type="submit">Classify →</button>
+    </form>
+    <div id="classify-result" hidden>
+      <div class="result-tier" id="res-tier"></div>
+      <div class="result-model" id="res-model"></div>
+      <div class="result-rationale" id="res-rationale"></div>
+      <div class="result-meta">
+        <span id="res-confidence"></span>
+        <span id="res-cache" hidden>cache</span>
+      </div>
+    </div>
+    <div id="classify-error" hidden class="result-error"></div>
+  </section>
+</main>
+
+<footer>
+  Endpoints: <code>/health</code> · <code>/cost</code> · <code>/shift</code> · <code>POST /classify</code><br/>
+  Built by <a href="https://sovareq.com">Sovareq BV</a> · <a href="mailto:bjorn@sovareq.com">bjorn@sovareq.com</a>
+</footer>
+
+<script>
+const fmt = (n) => {
+  if (typeof n !== 'number' || !isFinite(n)) return '$0.00';
+  return '$' + n.toFixed(n < 1 ? 4 : 2);
+};
+
+async function fetchJson(url, opts) {
+  try {
+    const r = await fetch(url, opts);
+    if (!r.ok) return null;
+    return await r.json();
+  } catch (e) { return null; }
+}
+
+async function refreshHealth() {
+  const h = await fetchJson('/health');
+  const pill = document.getElementById('health');
+  if (h && h.status === 'ok') {
+    pill.className = 'health-pill health-ok';
+    pill.textContent = '● v' + (h.version || '?');
+  } else {
+    pill.className = 'health-pill health-down';
+    pill.textContent = '● offline';
+  }
+}
+
+async function refreshCost() {
+  const c = await fetchJson('/cost');
+  if (!c) return;
+  // Per tier
+  for (const tier of ['hk', 'so', 'op']) {
+    const t = (c.by_tier || {})[tier] || {};
+    document.getElementById(`tier-${tier}-count`).textContent = t.count || 0;
+    document.getElementById(`tier-${tier}-cost`).textContent = fmt(t.total_usd || 0);
+  }
+  // Totals
+  const tot = c.totals || {};
+  document.getElementById('totals-count').textContent = tot.count || 0;
+  document.getElementById('totals-cost').textContent = fmt(tot.total_usd || 0);
+  document.getElementById('totals-baseline').textContent = fmt(tot.baseline_opus_usd || 0);
+  // Savings
+  document.getElementById('savings').textContent = fmt(tot.savings_usd || 0);
+  const pct = (tot.baseline_opus_usd > 0)
+    ? ((tot.savings_usd / tot.baseline_opus_usd) * 100).toFixed(0)
+    : 0;
+  if ((tot.count || 0) === 0) {
+    document.getElementById('savings-context').textContent =
+      'Nog geen gecachede calls. Doe één classify-call om te starten.';
+  } else {
+    document.getElementById('savings-context').textContent =
+      `${pct}% goedkoper dan altijd-Opus, over ${tot.count} call${tot.count === 1 ? '' : 's'}.`;
+  }
+  // Per dag
+  const tbody = document.getElementById('by-day-body');
+  const days = c.by_day || {};
+  const keys = Object.keys(days).sort().reverse();
+  if (keys.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" class="empty">Nog geen calls gecached</td></tr>';
+  } else {
+    tbody.innerHTML = keys.map(k => {
+      const d = days[k];
+      return `<tr>
+        <td>${k}</td>
+        <td class="num">${d.count || 0}</td>
+        <td class="num">${fmt(d.total_usd || 0)}</td>
+        <td class="num" style="color: var(--color-accent)">${fmt(d.savings_usd || 0)}</td>
+      </tr>`;
+    }).join('');
+  }
+}
+
+async function refreshShift() {
+  const s = await fetchJson('/shift');
+  if (!s) return;
+  const v = s.value || 0;
+  document.querySelectorAll('.shift-btn').forEach(b => {
+    b.classList.toggle('active', parseInt(b.dataset.shift, 10) === v);
+  });
+}
+
+document.querySelectorAll('.shift-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const v = parseInt(btn.dataset.shift, 10);
+    await fetchJson('/shift', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ value: v }),
+    });
+    await refreshShift();
+  });
+});
+
+// ---- Classify panel handler (sectie 2) ----
+const classifyForm = document.getElementById('classify-form');
+const classifyBtn = document.getElementById('cf-submit');
+const resultBox = document.getElementById('classify-result');
+const errorBox = document.getElementById('classify-error');
+const resTier = document.getElementById('res-tier');
+const resModel = document.getElementById('res-model');
+const resRationale = document.getElementById('res-rationale');
+const resConfidence = document.getElementById('res-confidence');
+const resCache = document.getElementById('res-cache');
+
+classifyForm.addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const scope = document.getElementById('cf-scope').value;
+  const locStr = document.getElementById('cf-loc').value;
+  const filesStr = document.getElementById('cf-files').value;
+  // Lege scope-md weglaten zodat de server 400 (missing required field) teruggeeft
+  // i.p.v. een (zinloze) classify op een lege string te draaien.
+  const payload = {
+    task_id: String(Date.now()),
+  };
+  if (scope.trim() !== '') payload.scope_md = scope;
+  if (locStr !== '') payload.estimated_loc = parseInt(locStr, 10);
+  if (filesStr !== '') payload.estimated_files = parseInt(filesStr, 10);
+
+  const originalText = classifyBtn.textContent;
+  classifyBtn.disabled = true;
+  classifyBtn.textContent = '…';
+  resultBox.hidden = true;
+  errorBox.hidden = true;
+
+  try {
+    const r = await fetch('/classify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) {
+      errorBox.textContent = `HTTP ${r.status}: ${r.statusText || 'fout'}`;
+      errorBox.hidden = false;
+      return;
+    }
+    const j = await r.json();
+    if (!j) {
+      errorBox.textContent = 'Lege respons van /classify';
+      errorBox.hidden = false;
+      return;
+    }
+    resTier.textContent = '@' + (j.tier || '?');
+    resModel.textContent = j.model_hint || '';
+    resRationale.textContent = j.rationale || '';
+    resConfidence.textContent = (j.confidence != null) ? `${j.confidence}%` : '';
+    resCache.hidden = !j.from_cache;
+    resultBox.hidden = false;
+  } catch (e) {
+    errorBox.textContent = `Netwerk-fout: ${e.message || e}`;
+    errorBox.hidden = false;
+  } finally {
+    classifyBtn.disabled = false;
+    classifyBtn.textContent = originalText;
+  }
+});
+
+async function refreshAll() {
+  await Promise.all([refreshHealth(), refreshCost(), refreshShift()]);
+}
+
+refreshAll();
+setInterval(refreshAll, 5000);
+</script>
+</body>
+</html>

@@ -1,0 +1,52 @@
+# SovaCount / token-governor — pricing config
+# Verified May 2026 list-prices, USD per 1M tokens.
+# Override location: GOVERNOR_PRICING_FILE env-var, or ~/.config/token-governor/pricing.toml.
+# Schema: [<provider>.<tier>] input_per_mtok, output_per_mtok
+
+[anthropic.hk]
+input_per_mtok = 1.0
+output_per_mtok = 5.0
+
+[anthropic.so]
+input_per_mtok = 3.0
+output_per_mtok = 15.0
+
+[anthropic.op]
+input_per_mtok = 5.0
+output_per_mtok = 25.0
+
+[openai.hk]
+input_per_mtok = 0.15
+output_per_mtok = 0.6
+
+[openai.so]
+input_per_mtok = 2.5
+output_per_mtok = 10.0
+
+[openai.op]
+input_per_mtok = 15.0
+output_per_mtok = 60.0
+
+[ollama.hk]
+input_per_mtok = 0.0
+output_per_mtok = 0.0
+
+[ollama.so]
+input_per_mtok = 0.0
+output_per_mtok = 0.0
+
+[ollama.op]
+input_per_mtok = 0.0
+output_per_mtok = 0.0
+
+[custom.hk]
+input_per_mtok = 1.0
+output_per_mtok = 5.0
+
+[custom.so]
+input_per_mtok = 3.0
+output_per_mtok = 15.0
+
+[custom.op]
+input_per_mtok = 5.0
+output_per_mtok = 25.0

@@ -234,6 +234,7 @@ mod tests {
             estimated_loc: Some(40),
             estimated_files: Some(1),
             no_cache,
+            shift: 0,
         }
     }
 

@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+<!-- 2026-05-05: cargo check + cargo clippy --workspace --all-targets -- -D warnings beide groen, geen dead-code/unused warnings. -->
+
+## [0.2.0] — 2026-05-05
+
+### Added
+- Per-provider pricing config: `PricingConfig` met `anthropic`, `openai`, `ollama`, `custom` rate-tabellen.
+- `pricing.toml` aan workspace-root met geverifieerde May 2026 list-prices als ship-default.
+- `GOVERNOR_PRICING_FILE` env-var voor pricing-override; fallback naar `~/.config/token-governor/pricing.toml`, dan built-in defaults.
+- Savings-teller op `GET /cost`: `baseline_opus_usd` en `savings_usd` per tier, per dag en in totals — gebruikt actieve provider's Opus-class rate.
+- `ProviderKind::pricing_provider()` mapper voor active-provider-aware kost-berekening.
+
+### Changed
+- Dashboard CSS aligned to YuniTrack/Sovaguard design-token system.
+- Dashboard: classify-panel added (POST /classify inline in UI).
+- Fixed: empty `scope_md` in classify-panel POST payload now correctly
+  omitted so server returns HTTP 400 instead of silent bogus-200 pass-through.
+
 ## [0.1.0] — 2026-04-30
 
 ### Added
@@ -53,5 +70,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Ollama: `@hk` → `llama3.2:3b`, `@so` → `llama3.3:70b`,
   `@op` → `deepseek-r1:70b`. Classifier itself: `deepseek-r1:70b`.
 
-[Unreleased]: https://github.com/brainzzlab-hub/token-governor/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/brainzzlab-hub/token-governor/releases/tag/v0.1.0
+[Unreleased]: https://github.com/sovareq/token-governor/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/sovareq/token-governor/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/sovareq/token-governor/releases/tag/v0.1.0

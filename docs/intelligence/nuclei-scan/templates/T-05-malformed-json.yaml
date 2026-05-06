@@ -1,0 +1,34 @@
+id: governor-malformed-json
+
+info:
+  name: governor-http malformed JSON body handling
+  author: sovareq
+  severity: high
+  tags: api,robustness
+
+http:
+  - method: POST
+    path:
+      - "{{BaseURL}}/classify"
+
+    headers:
+      Content-Type: application/json
+
+    payloads:
+      malformed:
+        - '{broken json'
+        - '{"task_id": }'
+        - 'null'
+        - '[]'
+        - ''
+        - '{"task_id":"x","scope_md":'
+
+    body: "{{malformed}}"
+
+    attack: batteringram
+
+    matchers:
+      - type: status
+        status:
+          - 400
+          - 422

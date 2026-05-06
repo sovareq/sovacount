@@ -40,6 +40,23 @@ impl ProviderKind {
             other => Err(GovernorError::UnknownProvider(other.into())),
         }
     }
+
+    /// Map this provider to its pricing-table key in
+    /// [`crate::pricing::PricingProvider`].
+    ///
+    /// `Mock` and `Custom` both map to [`PricingProvider::Custom`] —
+    /// the best-effort fallback rate-card. Anthropic / OpenAI / Ollama
+    /// map one-to-one.
+    pub fn pricing_provider(&self) -> crate::pricing::PricingProvider {
+        match self {
+            ProviderKind::Anthropic => crate::pricing::PricingProvider::Anthropic,
+            ProviderKind::OpenAi => crate::pricing::PricingProvider::OpenAI,
+            ProviderKind::Ollama => crate::pricing::PricingProvider::Ollama,
+            // Mock has no real rate-card; route to Custom (best-effort,
+            // user-overridable via pricing.toml).
+            ProviderKind::Mock | ProviderKind::Custom => crate::pricing::PricingProvider::Custom,
+        }
+    }
 }
 
 /// Resolved configuration. Constructed via [`Config::from_env`] or builders.

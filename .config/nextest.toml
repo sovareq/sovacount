@@ -1,0 +1,10 @@
+[profile.default]
+# M4 heeft 10 cores (6P + 4E). Laat nextest vrij kiezen maar cap op 8
+# om thermische throttle te vermijden bij lange runs.
+test-threads = 8
+fail-fast = false
+
+[profile.ci]
+test-threads = 4
+fail-fast = true
+retries = { backoff = "fixed", count = 1, delay = "1s" }

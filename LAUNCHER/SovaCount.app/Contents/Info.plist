@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key>
+  <string>SovaCount</string>
+  <key>CFBundleDisplayName</key>
+  <string>SovaCount</string>
+  <key>CFBundleIdentifier</key>
+  <string>com.sovareq.sovacount</string>
+  <key>CFBundleVersion</key>
+  <string>0.2.0</string>
+  <key>CFBundleExecutable</key>
+  <string>sovacount-launcher</string>
+  <key>CFBundleIconFile</key>
+  <string>icon</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>LSUIElement</key>
+  <false/>
+  <key>LSMinimumSystemVersion</key>
+  <string>12.0</string>
+</dict>
+</plist>

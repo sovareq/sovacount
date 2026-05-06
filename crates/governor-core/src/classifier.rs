@@ -88,25 +88,27 @@ impl Classifier {
             provider = self.provider.name(),
             classifier_model = %self.config.classifier_model,
             no_cache = req.no_cache,
+            shift = req.shift,
             "classify start"
         );
 
-        // 1. Cache lookup.
+        // 1. Cache lookup. Cache stays shift-agnostic so the same task is
+        // only classified once regardless of how many shifts it goes through.
         if !req.no_cache
             && let Some(hit) = self.cache.get(&req).await?
         {
             debug!("cache hit");
-            return Ok(hit);
+            return Ok(self.apply_shift(hit, req.shift));
         }
 
-        // 2. Heuristic fast-path.
-        if let Some(mut resp) = heuristic::fast_path(&req) {
+        // 2. Heuristic fast-path. Cost-estimates use the *active* provider's
+        //    rate-card, not a hardcoded one.
+        let pricing = self.config.provider.pricing_provider();
+        if let Some(mut resp) = heuristic::fast_path(&req, pricing) {
             resp.model_hint = self.config.tier_mapping.get(&resp.tier).cloned();
-            // Fast-path responses already carry estimated_cost_usd; nothing to
-            // recompute here. Cache it (best-effort).
             self.cache_put_best_effort(&req, &resp).await;
             debug!(tier = %resp.tier, "fast-path hit");
-            return Ok(resp);
+            return Ok(self.apply_shift(resp, req.shift));
         }
 
         // 3. Live provider call.
@@ -119,6 +121,7 @@ impl Classifier {
         let mut resp = parse_classifier_output(&raw)?;
         resp.model_hint = self.config.tier_mapping.get(&resp.tier).cloned();
         resp.estimated_cost_usd = estimate_cost_usd(
+            pricing,
             resp.tier,
             resp.estimated_input_tokens,
             resp.estimated_output_tokens,
@@ -127,7 +130,31 @@ impl Classifier {
 
         self.cache_put_best_effort(&req, &resp).await;
         debug!(tier = %resp.tier, confidence = resp.confidence, "live classification");
-        Ok(resp)
+        Ok(self.apply_shift(resp, req.shift))
+    }
+
+    /// Apply a user tier-shift on top of an already-classified response.
+    /// Re-resolves `model_hint` and `estimated_cost_usd` against the new
+    /// tier so the response stays internally consistent. `shift == 0` is a
+    /// no-op fast-path.
+    fn apply_shift(&self, mut resp: ClassifyResponse, shift: i32) -> ClassifyResponse {
+        if shift == 0 {
+            return resp;
+        }
+        let new_tier = resp.tier.shifted(shift);
+        if new_tier == resp.tier {
+            // Already at the clamp boundary; nothing to do.
+            return resp;
+        }
+        resp.tier = new_tier;
+        resp.model_hint = self.config.tier_mapping.get(&new_tier).cloned();
+        resp.estimated_cost_usd = estimate_cost_usd(
+            self.config.provider.pricing_provider(),
+            new_tier,
+            resp.estimated_input_tokens,
+            resp.estimated_output_tokens,
+        );
+        resp
     }
 
     async fn cache_put_best_effort(&self, req: &ClassifyRequest, resp: &ClassifyResponse) {
@@ -139,11 +166,12 @@ impl Classifier {
     /// Aggregate cached classifications into a [`CostReport`].
     ///
     /// Reads every entry under the configured cache directory and rolls up
-    /// counts + cumulative `estimated_cost_usd` by tier and by UTC day. See
-    /// [`crate::cost::aggregate`] for caveats (cached-only data, mtime-based
-    /// day buckets).
+    /// counts + cumulative `estimated_cost_usd` by tier and by UTC day. The
+    /// always-Opus baseline / savings are computed against the *active*
+    /// provider's rate-card. See [`crate::cost::aggregate`] for caveats
+    /// (cached-only data, mtime-based day buckets).
     pub async fn cost_report(&self) -> Result<crate::cost::CostReport> {
-        crate::cost::aggregate(&self.cache.dir).await
+        crate::cost::aggregate(&self.cache.dir, self.config.provider.pricing_provider()).await
     }
 }
 
@@ -245,6 +273,8 @@ mod tests {
             estimated_loc: loc,
             estimated_files: files,
             no_cache: false,
+
+            shift: 0,
         }
     }
 

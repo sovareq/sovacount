@@ -59,6 +59,12 @@ pub struct ClassifyParams {
     /// If `true`, governor must skip cache lookup for this request.
     #[serde(default)]
     pub no_cache: bool,
+
+    /// Tier-shift override. `+1` = upshift (more capable), `-1` = downshift
+    /// (cheaper), `0` = honour the classifier exactly. Out-of-range values
+    /// clamp.
+    #[serde(default)]
+    pub shift: i32,
 }
 
 impl From<ClassifyParams> for ClassifyRequest {
@@ -70,6 +76,7 @@ impl From<ClassifyParams> for ClassifyRequest {
             estimated_loc: p.estimated_loc,
             estimated_files: p.estimated_files,
             no_cache: p.no_cache,
+            shift: p.shift,
         }
     }
 }

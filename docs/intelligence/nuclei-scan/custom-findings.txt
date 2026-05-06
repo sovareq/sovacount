@@ -1,0 +1,23 @@
+[governor-shift-out-of-range] [http] [medium] http://127.0.0.1:8989/shift [value="{\"value\": \"up\"}"]
+[governor-malformed-json] [http] [high] http://127.0.0.1:8989/classify [malformed=""]
+[governor-shift-out-of-range] [http] [medium] http://127.0.0.1:8989/shift [value="{\"value\": null}"]
+[governor-security-headers:missing-x-content-type-options] [http] [medium] http://127.0.0.1:8989/
+[governor-method-confusion] [http] [medium] http://127.0.0.1:8989/classify
+[governor-malformed-json] [http] [high] http://127.0.0.1:8989/classify [malformed="{broken json"]
+[governor-path-traversal] [http] [critical] http://127.0.0.1:8989/../etc/passwd
+[governor-shift-out-of-range] [http] [medium] http://127.0.0.1:8989/shift [value="{\"value\": 2.5}"]
+[governor-security-headers:missing-x-frame-options] [http] [medium] http://127.0.0.1:8989/
+[governor-shift-out-of-range] [http] [medium] http://127.0.0.1:8989/shift [value="{\"value\": -9999}"]
+[governor-security-headers:missing-content-security-policy] [http] [medium] http://127.0.0.1:8989/
+[governor-malformed-json] [http] [high] http://127.0.0.1:8989/classify [malformed="null"]
+[governor-shift-out-of-range] [http] [medium] http://127.0.0.1:8989/shift [value="{\"value\": 9999}"]
+[governor-malformed-json] [http] [high] http://127.0.0.1:8989/classify [malformed="{\"task_id\": }"]
+[governor-malformed-json] [http] [high] http://127.0.0.1:8989/classify [malformed="[]"]
+[governor-malformed-json] [http] [high] http://127.0.0.1:8989/classify [malformed="{\"task_id\":\"x\",\"scope_md\":"]
+[governor-classify-auth] [http] [high] http://127.0.0.1:8989/classify
+[governor-path-traversal] [http] [critical] http://127.0.0.1:8989/%2e%2e%2fetc%2fpasswd
+[governor-security-headers:missing-x-content-type-options] [http] [medium] http://127.0.0.1:8989/health
+[governor-security-headers:missing-x-frame-options] [http] [medium] http://127.0.0.1:8989/health
+[governor-security-headers:missing-content-security-policy] [http] [medium] http://127.0.0.1:8989/health
+[governor-path-traversal] [http] [critical] http://127.0.0.1:8989/..%2F..%2Fetc%2Fpasswd
+[governor-path-traversal] [http] [critical] http://127.0.0.1:8989////etc/passwd
