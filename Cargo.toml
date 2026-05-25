@@ -4,6 +4,7 @@ members = [
     "crates/governor-cli",
     "crates/governor-http",
     "crates/governor-mcp",
+    "crates/governor-launcher-gui",
 ]
 resolver = "2"
 
@@ -11,10 +12,11 @@ resolver = "2"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.94"
-license = "MIT"
-repository = "https://github.com/sovareq/token-governor"
-homepage = "https://github.com/sovareq/token-governor"
-authors = ["Sovareq BV <bjorn@sovareq.com>"]
+license = "UNLICENSED"
+publish = false
+repository = "https://codeberg.org/sovareq_bv/sovacount"
+homepage = "https://codeberg.org/sovareq_bv/sovacount"
+authors = ["bjorn@sovareq.com"]
 description = "Cost-optimizing classifier for AI-agent tasks. Tags tranches with @op/@so/@hk so cheaper models handle simpler work."
 readme = "README.md"
 keywords = ["llm", "router", "classifier", "mcp", "agent"]

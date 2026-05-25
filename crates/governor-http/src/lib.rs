@@ -7,6 +7,7 @@
 //! during the parallel fan-out phase).
 
 #![forbid(unsafe_code)]
+#![allow(clippy::collapsible_if)]
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -165,9 +166,156 @@ pub fn router<C: ClassifierLike>(state: AppState<C>) -> Router {
         .route("/classify", post(classify::<C>))
         .route("/cost", get(cost::<C>))
         .route("/shift", get(shift_get::<C>).post(shift_post::<C>))
+        .route("/reset", post(reset::<C>))
+        .route("/recent", get(recent::<C>))
         .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::permissive())
         .with_state(state)
+}
+
+/// Resolve the on-disk cache directory used by `governor-core` for the
+/// classify-response cache. Mirrors the resolution in
+/// `governor_core::config::Config::from_env`:
+///   1. `GOVERNOR_CACHE_DIR` env override
+///   2. `dirs::cache_dir().join("token-governor")` platform default
+fn resolve_cache_dir() -> Option<PathBuf> {
+    if let Ok(p) = std::env::var("GOVERNOR_CACHE_DIR") {
+        if !p.is_empty() {
+            return Some(PathBuf::from(p));
+        }
+    }
+    let mut p = dirs::cache_dir()?;
+    p.push("token-governor");
+    Some(p)
+}
+
+#[derive(Debug, Serialize)]
+struct ResetReport {
+    deleted_files: usize,
+    cache_dir: String,
+}
+
+/// `POST /reset` — verwijdert alle `.json`-bestanden in de classify-cache-dir.
+/// Dashboard-counters resetten naar 0 omdat `/cost` direct uit deze dir aggregeert.
+/// Veiligheid: alleen `*.json` files met geldige `ClassifyResponse`-shape worden
+/// verwijderd (best-effort — niet recursief, geen sub-dirs).
+async fn reset<C: ClassifierLike>(
+    State(_state): State<AppState<C>>,
+    headers: HeaderMap,
+) -> Response {
+    let dir = match resolve_cache_dir() {
+        Some(d) => d,
+        None => {
+            return error_response(StatusCode::INTERNAL_SERVER_ERROR, "cache dir not resolvable");
+        }
+    };
+    // Reuse auth-check (Bearer-token if state is configured)
+    let state_clone = _state.clone();
+    if let Some(resp) = check_auth(&state_clone, &headers) {
+        return resp;
+    }
+
+    let mut deleted = 0usize;
+    if dir.exists() {
+        if let Ok(entries) = std::fs::read_dir(&dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|s| s.to_str()) == Some("json") {
+                    // Skip half-written tmp files (.tmp)
+                    let is_dotfile = path
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .map(|s| s.starts_with('.'))
+                        .unwrap_or(false);
+                    if is_dotfile {
+                        continue;
+                    }
+                    if std::fs::remove_file(&path).is_ok() {
+                        deleted += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    let report = ResetReport {
+        deleted_files: deleted,
+        cache_dir: dir.display().to_string(),
+    };
+    (StatusCode::OK, Json(report)).into_response()
+}
+
+#[derive(Debug, Serialize)]
+struct RecentEntry {
+    mtime_unix: u64,
+    response: ClassifyResponse,
+}
+
+#[derive(Debug, Serialize)]
+struct RecentReport {
+    entries: Vec<RecentEntry>,
+}
+
+/// `GET /recent` — laatste 20 classify-responses, gesorteerd op mtime DESC.
+/// Voor de "live feed" sectie in de dashboard.
+async fn recent<C: ClassifierLike>(
+    State(_state): State<AppState<C>>,
+    headers: HeaderMap,
+) -> Response {
+    let state_clone = _state.clone();
+    if let Some(resp) = check_auth(&state_clone, &headers) {
+        return resp;
+    }
+
+    let dir = match resolve_cache_dir() {
+        Some(d) => d,
+        None => {
+            return (StatusCode::OK, Json(RecentReport { entries: vec![] })).into_response();
+        }
+    };
+
+    let mut items: Vec<(std::time::SystemTime, PathBuf)> = Vec::new();
+    if dir.exists() {
+        if let Ok(entries) = std::fs::read_dir(&dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|s| s.to_str()) != Some("json") {
+                    continue;
+                }
+                let is_dotfile = path
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .map(|s| s.starts_with('.'))
+                    .unwrap_or(false);
+                if is_dotfile {
+                    continue;
+                }
+                if let Ok(meta) = entry.metadata() {
+                    if let Ok(mtime) = meta.modified() {
+                        items.push((mtime, path));
+                    }
+                }
+            }
+        }
+    }
+
+    items.sort_by_key(|item| std::cmp::Reverse(item.0));
+    items.truncate(20);
+
+    let mut entries = Vec::with_capacity(items.len());
+    for (mtime, path) in items {
+        if let Ok(bytes) = std::fs::read(&path) {
+            if let Ok(resp) = serde_json::from_slice::<ClassifyResponse>(&bytes) {
+                let mtime_unix = mtime
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
+                entries.push(RecentEntry { mtime_unix, response: resp });
+            }
+        }
+    }
+
+    (StatusCode::OK, Json(RecentReport { entries })).into_response()
 }
 
 /// `GET /` — embedded HTML dashboard. Pulls live data from `/cost`, `/shift`
@@ -246,11 +394,12 @@ struct ErrorBody {
 /// 2. JSON-body parse — bad bodies are rejected with 400 (axum's
 ///    [`JsonRejection`](axum::extract::rejection::JsonRejection) is mapped
 ///    here rather than letting axum return its default 422).
-/// 3a. If a `classify_tx` worker-channel is attached: enqueue via
-///    [`mpsc::Sender::try_send`] and `await` the worker's reply through a
-///    [`oneshot`] channel. Bounded backpressure: a full queue returns 503.
-///    A closed channel (worker stopped) also returns 503.
-/// 3b. Otherwise (tests): call [`ClassifierLike::classify`] directly.
+/// 3. Dispatch path depends on whether a worker-channel is attached:
+///    - 3a. If `classify_tx` is set: enqueue via [`mpsc::Sender::try_send`]
+///      and `await` the worker's reply through a [`oneshot`] channel.
+///      Bounded backpressure: a full queue returns 503. A closed channel
+///      (worker stopped) also returns 503.
+///    - 3b. Otherwise (tests): call [`ClassifierLike::classify`] directly.
 async fn classify<C: ClassifierLike>(
     State(state): State<AppState<C>>,
     headers: HeaderMap,

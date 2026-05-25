@@ -4,10 +4,33 @@ all-features = true
 [advisories]
 version = 2
 yanked = "deny"
-ignore = []
+ignore = [
+    # gtk-rs GTK3-bindings via wry/tao chain. SovaCount-launcher draait
+    # alleen op macOS (WKWebView/AppKit pad); GTK3-pad wordt enkel op
+    # Linux gecompileerd. Geen runtime-footprint op onze productie-targets.
+    # Volg upstream-migratie naar gtk4-rs zodra wry/tao dat ondersteunen.
+    "RUSTSEC-2024-0411",
+    "RUSTSEC-2024-0412",
+    "RUSTSEC-2024-0413",
+    "RUSTSEC-2024-0414",
+    "RUSTSEC-2024-0415",
+    "RUSTSEC-2024-0416",
+    "RUSTSEC-2024-0418",
+    "RUSTSEC-2024-0419",
+    "RUSTSEC-2024-0420",
+    # proc-macro-error unmaintained (RUSTSEC-2024-0370), via wry compile-time.
+    # Compile-only afhankelijkheid, geen runtime-impact.
+    "RUSTSEC-2024-0370",
+    # fxhash unmaintained (RUSTSEC-2025-0057), via wry-deps. Hashing-only,
+    # geen security-impact. Volg upstream-migratie.
+    "RUSTSEC-2025-0057",
+]
 
 [licenses]
 version = 2
+# Workspace-crates dragen `license = "UNLICENSED"` (proprietary, intern Sovareq,
+# `publish = false`). cargo-deny behandelt deze als private-exception.
+private = { ignore = true }
 allow = [
     "MIT",
     "Apache-2.0",

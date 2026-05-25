@@ -245,7 +245,7 @@
     font-weight: 600;
     font-family: var(--font-sans);
   }
-  td.num { text-align: right; }
+  th.num, td.num { text-align: right; }
   .empty {
     color: var(--color-ink-muted);
     font-style: italic;
@@ -355,6 +355,78 @@
     background: var(--color-accent-hover);
     border-color: var(--color-accent-hover);
   }
+  /* Reset-knop + live-feed styling, gebruikt bestaande tokens */
+  .reset-btn {
+    float: right;
+    background: var(--color-surface);
+    color: var(--color-ink-muted);
+    border: var(--border-thin);
+    border-color: var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: 4px 10px;
+    font-family: var(--font-sans);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .reset-btn:hover {
+    background: var(--color-surface-muted);
+    color: var(--color-ink);
+  }
+  .reset-btn:active { background: var(--color-surface-sunken); }
+  .reset-status {
+    margin-top: var(--space-3);
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-subtle);
+    border: var(--border-thin);
+    border-color: var(--color-border);
+    font-size: var(--text-sm);
+    color: var(--color-ink-muted);
+  }
+  .live-dot {
+    color: var(--color-on, #2ea043);
+    font-size: 10px;
+    margin-left: 8px;
+    animation: pulse 1.4s ease-in-out infinite;
+    vertical-align: middle;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 0.35; }
+    50% { opacity: 1; }
+  }
+  #recent-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--text-sm);
+  }
+  #recent-table th, #recent-table td {
+    text-align: left;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--color-border);
+    vertical-align: top;
+  }
+  #recent-table th.num, #recent-table td.num { text-align: right; }
+  #recent-table tr.fresh { background: var(--color-surface-subtle); }
+  #recent-table .rationale {
+    color: var(--color-ink-subtle);
+    max-width: 360px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  #recent-table .tier-pill {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-surface);
+  }
+  #recent-table .tier-pill.hk { background: #2ea043; }
+  #recent-table .tier-pill.so { background: #1f6feb; }
+  #recent-table .tier-pill.op { background: #d1342f; }
+
   #classify-panel button:disabled {
     opacity: 0.6;
     cursor: not-allowed;
@@ -476,7 +548,10 @@
   </section>
 
   <section class="card full">
-    <h2>Cumulatief (totaal)</h2>
+    <h2>
+      Cumulatief (totaal)
+      <button id="reset-btn" class="reset-btn" title="Verwijder alle gecachede calls. Counters gaan terug naar 0.">↻ Reset cache</button>
+    </h2>
     <div class="stat-grid">
       <div class="stat">
         <div class="stat-label">Calls</div>
@@ -491,6 +566,25 @@
         <div class="stat-value" id="totals-baseline">$0.00</div>
       </div>
     </div>
+    <div id="reset-status" class="reset-status" hidden></div>
+  </section>
+
+  <section class="card full">
+    <h2>Live feed — laatste 20 beslissingen <span class="live-dot" id="live-dot">●</span></h2>
+    <p class="panel-intro">Auto-refresh elke 2s. Toont wat sovacount net heeft beslist + wat de besparing was t.o.v. altijd-Opus.</p>
+    <table id="recent-table">
+      <thead><tr>
+        <th>Tijd</th>
+        <th>Tier</th>
+        <th>Model-hint</th>
+        <th>Conf</th>
+        <th class="num">Cost</th>
+        <th class="num">Baseline</th>
+        <th class="num">Bespaard</th>
+        <th>Rationale</th>
+      </tr></thead>
+      <tbody id="recent-body"><tr><td colspan="8" class="empty">Wachten op eerste classify-call…</td></tr></tbody>
+    </table>
   </section>
 
   <section class="card full">
@@ -529,7 +623,7 @@
 
 <footer>
   Endpoints: <code>/health</code> · <code>/cost</code> · <code>/shift</code> · <code>POST /classify</code><br/>
-  Built by <a href="https://sovareq.com">Sovareq BV</a> · <a href="mailto:bjorn@sovareq.com">bjorn@sovareq.com</a>
+  Built by <a href="mailto:bjorn@sovareq.com">bjorn@sovareq.com</a>
 </footer>
 
 <script>
@@ -687,12 +781,104 @@ classifyForm.addEventListener('submit', async (ev) => {
   }
 });
 
+// ---- Live-feed (sectie 3) ----
+const recentBody = document.getElementById('recent-body');
+let lastRecentKeys = new Set();
+
+function fmtTime(unix) {
+  if (!unix) return '—';
+  const d = new Date(unix * 1000);
+  return d.toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function escapeHtml(s) {
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+async function refreshRecent() {
+  const r = await fetchJson('/recent');
+  if (!r || !Array.isArray(r.entries)) return;
+  if (r.entries.length === 0) {
+    recentBody.innerHTML = '<tr><td colspan="8" class="empty">Wachten op eerste classify-call…</td></tr>';
+    lastRecentKeys = new Set();
+    return;
+  }
+  // Track which entries are "new since last poll" for the fresh-row highlight
+  const currentKeys = new Set();
+  recentBody.innerHTML = r.entries.map((e) => {
+    const resp = e.response || {};
+    const key = `${e.mtime_unix}-${resp.tier || ''}-${(resp.rationale || '').slice(0, 20)}`;
+    currentKeys.add(key);
+    const isFresh = !lastRecentKeys.has(key);
+    const cost = resp.estimated_cost_usd || 0;
+    // Reken baseline (alles-Opus) en savings ad-hoc op basis van token-counts.
+    // Pricing mei 2026: Opus $5/M in, $25/M out.
+    const inTok = resp.estimated_input_tokens || 0;
+    const outTok = resp.estimated_output_tokens || 0;
+    const baseline = (inTok / 1e6) * 5 + (outTok / 1e6) * 25;
+    const savings = Math.max(0, baseline - cost);
+    const tier = (resp.tier || '?').toLowerCase();
+    return `<tr class="${isFresh ? 'fresh' : ''}">
+      <td>${fmtTime(e.mtime_unix)}</td>
+      <td><span class="tier-pill ${tier}">${tier.toUpperCase()}</span></td>
+      <td><code>${escapeHtml(resp.model_hint || '—')}</code></td>
+      <td>${resp.confidence != null ? resp.confidence + '%' : '—'}</td>
+      <td class="num">${fmt(cost)}</td>
+      <td class="num">${fmt(baseline)}</td>
+      <td class="num" style="color: var(--color-accent)">${fmt(savings)}</td>
+      <td class="rationale" title="${escapeHtml(resp.rationale || '')}">${escapeHtml(resp.rationale || '')}</td>
+    </tr>`;
+  }).join('');
+  lastRecentKeys = currentKeys;
+}
+
+// ---- Reset-knop ----
+const resetBtn = document.getElementById('reset-btn');
+const resetStatus = document.getElementById('reset-status');
+
+resetBtn.addEventListener('click', async () => {
+  const ok = confirm(
+    'Reset alle gecachede classify-calls?\n\n' +
+    'Dit verwijdert alle .json-bestanden uit de classifier-cache. ' +
+    'Counters in dit dashboard gaan terug naar 0. ' +
+    'Toekomstige classify-calls beginnen opnieuw te cachen.\n\n' +
+    'Bestanden op disk worden permanent verwijderd. Niet te ongedaan maken.'
+  );
+  if (!ok) return;
+  resetBtn.disabled = true;
+  const original = resetBtn.textContent;
+  resetBtn.textContent = '… resetten';
+  try {
+    const r = await fetch('/reset', { method: 'POST' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    resetStatus.hidden = false;
+    resetStatus.textContent = `✓ Cache gewist — ${j.deleted_files} bestanden verwijderd uit ${j.cache_dir}`;
+    setTimeout(() => { resetStatus.hidden = true; }, 6000);
+    // Refresh meteen
+    await refreshAll();
+    await refreshRecent();
+  } catch (e) {
+    resetStatus.hidden = false;
+    resetStatus.textContent = '✗ Reset gefaald: ' + (e.message || e);
+  } finally {
+    resetBtn.disabled = false;
+    resetBtn.textContent = original;
+  }
+});
+
 async function refreshAll() {
   await Promise.all([refreshHealth(), refreshCost(), refreshShift()]);
 }
 
 refreshAll();
+refreshRecent();
 setInterval(refreshAll, 5000);
+setInterval(refreshRecent, 2000);
 </script>
 </body>
 </html>

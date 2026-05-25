@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>SovaCount</title>
+<style>
+  /* Sovareq design-tokens — identiek aan dashboard.
+     Geen externe CDN, geen woff2-fetch. */
+  :root {
+    --color-ink: #14181f;
+    --color-ink-muted: #363e4c;
+    --color-ink-subtle: #6b7280;
+    --color-surface: #ffffff;
+    --color-surface-muted: #f5f5f7;
+    --color-surface-sunken: #eceff3;
+    --color-surface-subtle: #f8f9fb;
+    --color-border: #e5e7eb;
+    --color-accent: #1f6feb;
+    --color-accent-hover: #1958c4;
+    --color-on: #2ea043;
+    --color-off: #d1342f;
+    --radius: 8px;
+    --gap: 12px;
+    --pad: 16px;
+    --font-stack: -apple-system, BlinkMacSystemFont, "SF Pro Text",
+                  "Helvetica Neue", Helvetica, Arial, sans-serif;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: var(--color-surface);
+    color: var(--color-ink);
+    font-family: var(--font-stack);
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
+    cursor: default;
+  }
+
+  .frame {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    padding: var(--pad);
+    box-sizing: border-box;
+    gap: var(--gap);
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    gap: var(--gap);
+    padding-bottom: var(--gap);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--color-ink);
+  }
+
+  .subtitle {
+    font-size: 11px;
+    color: var(--color-ink-subtle);
+    margin-left: auto;
+  }
+
+  .status-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: var(--pad);
+    background: var(--color-surface-subtle);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+  }
+
+  .dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--color-off);
+    transition: background 0.18s ease;
+    flex-shrink: 0;
+  }
+  .dot.on { background: var(--color-on); }
+
+  .status-text {
+    font-size: 13px;
+    color: var(--color-ink-muted);
+  }
+  .status-text strong {
+    color: var(--color-ink);
+    font-weight: 600;
+  }
+
+  .actions {
+    display: flex;
+    gap: var(--gap);
+    margin-top: auto;
+  }
+
+  button {
+    flex: 1;
+    font-family: var(--font-stack);
+    font-size: 14px;
+    font-weight: 500;
+    padding: 10px 16px;
+    border-radius: var(--radius);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-ink);
+    cursor: pointer;
+    transition: background 0.12s ease, border-color 0.12s ease;
+  }
+  button:hover { background: var(--color-surface-muted); }
+  button:active { background: var(--color-surface-sunken); }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  button.primary {
+    background: var(--color-accent);
+    border-color: var(--color-accent);
+    color: white;
+  }
+  button.primary:hover { background: var(--color-accent-hover); border-color: var(--color-accent-hover); }
+
+  button.danger {
+    background: var(--color-off);
+    border-color: var(--color-off);
+    color: white;
+  }
+  button.danger:hover { filter: brightness(0.92); }
+
+  button.ghost {
+    background: var(--color-surface-subtle);
+    border-color: var(--color-border);
+    color: var(--color-ink-muted);
+    font-size: 12px;
+    padding: 6px 12px;
+  }
+  button.ghost:hover { background: var(--color-surface-muted); color: var(--color-ink); }
+
+  .secondary-row { margin-top: 0; }
+  .feedback {
+    margin-top: 8px;
+    font-size: 11px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    background: var(--color-surface-subtle);
+    color: var(--color-ink-muted);
+    border: 1px solid var(--color-border);
+  }
+  .feedback.ok { color: var(--color-on); }
+  .feedback.err { color: var(--color-off); }
+
+  .footer {
+    font-size: 11px;
+    color: var(--color-ink-subtle);
+    text-align: center;
+  }
+  .footer code {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    background: var(--color-surface-sunken);
+    padding: 1px 5px;
+    border-radius: 4px;
+  }
+</style>
+</head>
+<body>
+  <div class="frame">
+    <header>
+      <div class="title">SovaCount</div>
+      <div class="subtitle">v0.2.0 · <span id="provider">mock provider</span></div>
+    </header>
+
+    <div class="status-row">
+      <div class="dot" id="dot"></div>
+      <div class="status-text">
+        Server: <strong id="status">controle …</strong>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button id="toggle" class="primary">Aanzetten</button>
+      <button id="dash">Dashboard</button>
+    </div>
+    <div class="actions secondary-row">
+      <button id="reset" class="ghost" title="Verwijder alle gecachede classify-calls. Counters in dashboard gaan terug naar 0.">↻ Reset cache</button>
+    </div>
+    <div id="reset-feedback" class="feedback" hidden></div>
+
+    <div class="footer">
+      <code>127.0.0.1:8989</code> · ad-hoc lokaal, geen externe call
+    </div>
+  </div>
+
+<script>
+  const dot = document.getElementById('dot');
+  const status = document.getElementById('status');
+  const toggle = document.getElementById('toggle');
+  const dash = document.getElementById('dash');
+
+  let isOn = false;
+
+  function render() {
+    if (isOn) {
+      dot.classList.add('on');
+      status.textContent = 'actief';
+      toggle.textContent = 'Uitzetten';
+      toggle.classList.remove('primary');
+      toggle.classList.add('danger');
+      dash.disabled = false;
+    } else {
+      dot.classList.remove('on');
+      status.textContent = 'uit';
+      toggle.textContent = 'Aanzetten';
+      toggle.classList.remove('danger');
+      toggle.classList.add('primary');
+      dash.disabled = true;
+    }
+  }
+
+  // Backend roept window.sovaSetStatus(true/false) aan via evaluate_script.
+  window.sovaSetStatus = function(on) {
+    isOn = !!on;
+    render();
+  };
+  window.sovaSetProvider = function(label) {
+    const el = document.getElementById('provider');
+    if (el && typeof label === 'string') el.textContent = label;
+  };
+
+  function send(payload) {
+    if (window.ipc && window.ipc.postMessage) {
+      window.ipc.postMessage(JSON.stringify(payload));
+    }
+  }
+
+  toggle.addEventListener('click', () => {
+    send({ action: isOn ? 'stop' : 'start' });
+  });
+  dash.addEventListener('click', () => {
+    send({ action: 'open_dashboard' });
+  });
+
+  const resetBtn = document.getElementById('reset');
+  const resetFeedback = document.getElementById('reset-feedback');
+
+  function showFeedback(text, kind) {
+    resetFeedback.textContent = text;
+    resetFeedback.className = 'feedback ' + (kind || '');
+    resetFeedback.hidden = false;
+    clearTimeout(window._sovaFeedbackTimer);
+    window._sovaFeedbackTimer = setTimeout(() => { resetFeedback.hidden = true; }, 5000);
+  }
+
+  // Twee-klik-bevestiging in plaats van native confirm() (wry-WebView blokkeert
+  // soms modal dialogs op macOS). Eerste klik = arming, tweede klik binnen 3s
+  // voert reset uit. Werkt ook als server-status-polling nog niet binnen is.
+  let armed = false;
+  let armTimer = null;
+  const resetOriginalText = resetBtn.textContent;
+
+  function disarm() {
+    armed = false;
+    resetBtn.textContent = resetOriginalText;
+    resetBtn.classList.remove('danger');
+    if (armTimer) { clearTimeout(armTimer); armTimer = null; }
+  }
+
+  resetBtn.addEventListener('click', () => {
+    if (!armed) {
+      armed = true;
+      resetBtn.textContent = '⚠ Klik nogmaals om te bevestigen (3s)';
+      resetBtn.classList.add('danger');
+      armTimer = setTimeout(disarm, 3000);
+      return;
+    }
+    disarm();
+    resetBtn.disabled = true;
+    showFeedback('… resetten via lokale server', '');
+    send({ action: 'reset' });
+  });
+
+  // Backend roept window.sovaResetResult({ok, count, dir, error}) na reset
+  window.sovaResetResult = function(res) {
+    resetBtn.disabled = false;
+    if (res && res.ok) {
+      showFeedback(`✓ Cache gewist — ${res.count} bestanden verwijderd`, 'ok');
+    } else {
+      showFeedback('✗ Reset gefaald: ' + (res && res.error ? res.error : 'onbekende fout'), 'err');
+    }
+  };
+
+  // Init state
+  render();
+</script>
+</body>
+</html>
