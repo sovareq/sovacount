@@ -7,7 +7,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-<!-- 2026-05-05: cargo check + cargo clippy --workspace --all-targets -- -D warnings beide groen, geen dead-code/unused warnings. -->
+## [0.3.0] — 2026-05-26
+
+### Added
+- **`crates/governor-launcher-gui`**: native wry+tao desktop launcher (macOS `.app`).
+  Binary `sovacount-launcher`. UI met aan/uit-knop, dashboard-link, reset-cache (twee-klik bevestiging),
+  live status-dot (groen=server up), provider-modus label (mock/anthropic).
+  Leest `~/.config/sovacount/anthropic-key` (chmod 600) bij startup voor auto-anthropic-provider.
+- **HTTP endpoint `POST /reset`**: verwijdert alle `.json` cache-bestanden, retourneert
+  `{deleted_files, cache_dir}`. Dashboard counters resetten naar 0.
+- **HTTP endpoint `GET /recent`**: laatste 20 ClassifyResponses gesorteerd op mtime DESC,
+  voor dashboard live-feed.
+- **Dashboard "Live feed" sectie**: laatste 20 beslissingen, auto-refresh elke 2s, tier-pill +
+  model-hint + confidence + cost + baseline + bespaard + rationale per row.
+- **Dashboard "Reset cache" knop**: in Cumulatief-sectie met confirm-dialog.
+- README volledig herschreven na code↔doc cross-check (37 expliciete claims geverifieerd,
+  alle PASS na fix; 15 ontbrekende-uit-README features toegevoegd).
+- Volledige documentatie van CLI-flags `--shift`, `--provider`, `--no-cache`, `--task-id`.
+- Volledige documentatie van endpoints `/health`, `/cost`, `/shift`, `/recent`, `/reset`.
+- Gear-lever (`--shift` / `/shift`) sectie met `-2..=2` waarden + persistente opslag.
+- Heuristic fast-path drempels gedocumenteerd (HK<50 LOC/1 file, OP>300 LOC/>5 files/2+ markers).
+- ClassifyResponse-shape gedocumenteerd: `Complexity` enum, `alternative_tiers`, `from_cache`.
+- Pricing-defaults tabel + `GOVERNOR_PRICING_FILE` override documentatie.
+- Env-vars `CLASSIFY_QUEUE_DEPTH`, `GOVERNOR_HTTP_API_KEY` toegevoegd aan config-sectie.
+
+### Changed
+- **License**: workspace `Cargo.toml` `license = "MIT"` → `"UNLICENSED"` (proprietary, all rights reserved).
+  Workspace `publish = false` toegevoegd; alle crates inherit via `publish.workspace = true`.
+  `LICENSE`-bestand vervangen door proprietary tekst met NDA-pad voor klant-toegang.
+- **Repository-velden** in workspace `Cargo.toml`: `repository`/`homepage` → `codeberg.org/sovareq_bv/sovacount`.
+  Author: `Sovareq BV <bjorn@sovareq.com>` → `bjorn@sovareq.com`.
+- **Dashboard alignment**: `th.num` + `td.num` beide right-aligned (per-dag tabel kolom-headers
+  staan nu onder waarden ipv ernaast).
+- **Dashboard footer**: "Built by Sovareq BV" → "Built by bjorn@sovareq.com".
+- **cargo-deny config**: `private = { ignore = true }` voor proprietary workspace-crates.
+  RUSTSEC ignore-list uitgebreid met gtk-rs/proc-macro-error/fxhash (compile-time deps via
+  wry/tao op Linux-pad, geen runtime-impact op macOS WKWebView pad) met rationale.
+- Clippy hygiene: `sort_by` → `sort_by_key(Reverse(...))` in `/recent` handler;
+  doc-list indentation in classify-handler doc-comment.
+
+### Fixed
+- Server status-polling in launcher GUI: 600ms initial-delay zodat webview JS geladen is
+  vóór eerste `StatusChanged` event.
+- Reset-knop in launcher: twee-klik-bevestiging (wry blokkeert native `confirm()` op macOS).
+
+### Removed
+- Stub `parse_png_to_icon` in launcher GUI: icoon-handling volledig via macOS Info.plist
+  + `icon.icns` (geen runtime PNG-fallback meer nodig).
+
+### Internal
+- `PLAN.md` (T-G-1 initiële tranche-planning, 30 april) verplaatst naar
+  `docs/internal/PLAN-T-G-1-historical.md` met historisch-marker.
 
 ## [0.2.0] — 2026-05-05
 

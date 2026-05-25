@@ -19,7 +19,7 @@ use std::time::Duration;
 use tao::{
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoopBuilder},
-    window::{WindowBuilder, Icon},
+    window::WindowBuilder,
     dpi::LogicalSize,
 };
 use wry::WebViewBuilder;
@@ -46,21 +46,10 @@ fn main() -> wry::Result<()> {
         .build(&event_loop)
         .expect("window build");
 
-    // Probeer icoon te laden uit Resources (.app/Contents/Resources/icon.png).
-    // .icns wordt door tao niet rechtstreeks ondersteund — Info.plist regelt
-    // het dock-icoon. Hier laden we een optionele 256×256 PNG fallback.
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(parent) = exe.parent().and_then(|p| p.parent()) {
-            let png_path = parent.join("Resources").join("icon.png");
-            if png_path.exists() {
-                if let Ok(bytes) = std::fs::read(&png_path) {
-                    if let Some(icon) = parse_png_to_icon(&bytes) {
-                        window.set_window_icon(Some(icon));
-                    }
-                }
-            }
-        }
-    }
+    // Icoon-handling: volledig overgelaten aan macOS via Info.plist + icon.icns.
+    // Tao's set_window_icon vereist een raw RGBA-buffer en is niet nodig voor
+    // de .app-launcher omdat NSApplication het Resources/icon.icns automatisch
+    // uitleest. Geen PNG-fallback in de Rust-binary.
 
     let server_child: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
     let server_child_for_ipc = Arc::clone(&server_child);
@@ -333,14 +322,3 @@ fn locate_governor_http() -> Option<std::path::PathBuf> {
     None
 }
 
-/// Minimalistische PNG-decoder zonder externe crate: we lezen de width/height
-/// uit de IHDR-chunk en gebruiken de raw bytes als-is. Voor het tao-icoon
-/// hebben we echter RGBA-bytes nodig — daarom: alleen RGBA-PNGs werken hier.
-/// Als parsing faalt geven we None terug en heeft de launcher gewoon geen
-/// custom icoon (de .app krijgt het via Info.plist alsnog).
-fn parse_png_to_icon(_bytes: &[u8]) -> Option<Icon> {
-    // Voor de eerste versie laten we icoon-decoding over aan macOS via
-    // Info.plist + icon.icns. Custom tao-Icon vereist een raw RGBA buffer;
-    // dat heroptueren we later met een echte PNG-crate als nodig.
-    None
-}

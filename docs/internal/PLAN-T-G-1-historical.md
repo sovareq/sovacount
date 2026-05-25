@@ -1,3 +1,10 @@
+> **HISTORISCH DOCUMENT** — initiële implementation-plan van 30 april 2026.
+> Bewaard voor archief; weerspiegelt NIET de huidige codebase-staat.
+> Voor actuele documentatie: zie [`../../README.md`](../../README.md) en
+> [`../../CHANGELOG.md`](../../CHANGELOG.md).
+
+---
+
 # T-G-1 — Token Governor — Implementation Plan
 
 **Tranche-ID:** T-G-1
