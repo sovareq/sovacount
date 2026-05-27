@@ -143,6 +143,8 @@ curl -X POST http://127.0.0.1:8989/classify \
 | `POST` | `/shift` | Zet persistente gear-lever (`{"value": -2..=2}`) |
 | `GET` | `/recent` | Laatste 20 classify-responses, gesorteerd op mtime DESC (voor dashboard live-feed) |
 | `POST` | `/reset` | Wis alle `.json`-bestanden uit de classifier-cache. Returnt `{"deleted_files": N, "cache_dir": "..."}` |
+| `GET` | `/governor/state` | Lees routing-toggle (`{"enabled": bool}`). Absent state-file = `true` (fail-open). |
+| `POST` | `/governor/state` | Zet routing-toggle (`{"enabled": bool}`). Bij `false` retourneert `/classify` 503 `"governor disabled"`. Gepersisteerd naar `~/.config/token-governor/enabled`. Auth-gated als API-key gezet. |
 
 ### Auth (optioneel)
 
@@ -196,6 +198,7 @@ Bij startup leest de launcher `~/.config/sovacount/anthropic-key` (chmod 600 fil
 
 `GET /` toont een single-file dashboard in Sovareq design-tokens (geen externe CDN, geen woff2-fetch). Secties:
 
+- **Aan/uit-toggle** — pill naast health-badge in header; één klik schakelt routing aan/uit. Server-side state, vendor-agnostisch — elke client erft de toggle zonder per-client config.
 - **Bespaard t.o.v. altijd-Opus** — savings-banner (procent + dollar)
 - **Per tier** — HAIKU / SONNET / OPUS calls + cumulative spend
 - **Tier-shift (gear-lever)** — drie-knops UI om globaal `-1` / `0` / `+1` shift te kiezen (verstuurt naar `/shift`)
@@ -204,7 +207,7 @@ Bij startup leest de launcher `~/.config/sovacount/anthropic-key` (chmod 600 fil
 - **Per dag** — aggregate per UTC-datum (Calls / Kost / Bespaard)
 - **Classify een taak** — direct LLM-classify-knop, voor handmatige experimenten
 
-Polling-intervallen: `/cost`/`/shift`/`/health` elke 5s; `/recent` elke 2s.
+Polling-intervallen: `/cost`/`/shift`/`/health`/`/governor/state` elke 5s; `/recent` elke 2s.
 
 ## Configuratie
 
