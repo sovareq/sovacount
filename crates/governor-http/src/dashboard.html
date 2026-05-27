@@ -273,6 +273,36 @@
     border: 1px solid var(--color-ink);
   }
 
+  .governor-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-left: var(--space-3);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    padding: 4px var(--space-3);
+    border-radius: 999px;
+    cursor: pointer;
+    user-select: none;
+    background: var(--color-surface-sunken);
+    border: var(--border-thin);
+    color: var(--color-ink);
+    transition: background 0.12s ease, color 0.12s ease;
+  }
+  .governor-toggle[data-enabled="true"] {
+    background: var(--color-accent);
+    color: var(--color-surface);
+    border-color: var(--color-accent);
+  }
+  .governor-toggle[data-enabled="false"] {
+    background: var(--color-surface-muted);
+    color: var(--color-ink-muted);
+    border-color: var(--color-border-strong);
+  }
+  .governor-toggle:hover { filter: brightness(0.95); }
+  .governor-toggle:disabled { opacity: 0.5; cursor: wait; }
+
   footer {
     text-align: center;
     color: var(--color-ink-muted);
@@ -493,7 +523,10 @@
 </head>
 <body>
 <header>
-  <h1>SovaCount <span class="health-pill health-ok" id="health">●</span></h1>
+  <h1>SovaCount
+    <span class="health-pill health-ok" id="health">●</span>
+    <button type="button" class="governor-toggle" id="governor-toggle" data-enabled="true" title="Schakel routing aan/uit. Uit = /classify geeft 503 'governor disabled' terug.">⏻ aan</button>
+  </h1>
   <div class="sub">
     token-governor dashboard ·
     <a href="https://sovareq.com" target="_blank">sovareq.com</a> ·
@@ -697,6 +730,32 @@ async function refreshCost() {
   }
 }
 
+async function refreshGovernorState() {
+  const s = await fetchJson('/governor/state');
+  const btn = document.getElementById('governor-toggle');
+  if (!btn) return;
+  const enabled = s ? !!s.enabled : true;
+  btn.dataset.enabled = enabled ? 'true' : 'false';
+  btn.textContent = enabled ? '⏻ aan' : '⏻ uit';
+}
+
+document.getElementById('governor-toggle').addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
+  if (btn.disabled) return;
+  btn.disabled = true;
+  const next = btn.dataset.enabled !== 'true';
+  try {
+    await fetchJson('/governor/state', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: next }),
+    });
+  } finally {
+    btn.disabled = false;
+    await refreshGovernorState();
+  }
+});
+
 async function refreshShift() {
   const s = await fetchJson('/shift');
   if (!s) return;
@@ -872,7 +931,7 @@ resetBtn.addEventListener('click', async () => {
 });
 
 async function refreshAll() {
-  await Promise.all([refreshHealth(), refreshCost(), refreshShift()]);
+  await Promise.all([refreshHealth(), refreshCost(), refreshShift(), refreshGovernorState()]);
 }
 
 refreshAll();

@@ -72,6 +72,10 @@ pub struct AppState<C: ClassifierLike> {
     /// Path to the persistent gear-lever (`/shift`) value-file. Default is
     /// `$HOME/.config/token-governor/shift`. Tests inject a tempdir.
     shift_path: Arc<PathBuf>,
+    /// Path to the persistent governor-enabled flag file. Default is
+    /// `$HOME/.config/token-governor/enabled`. Absent file = enabled.
+    /// Content `0` = disabled, anything else = enabled.
+    enabled_path: Arc<PathBuf>,
     /// Zender naar de classify-worker. `None` betekent: directe path
     /// (gebruikt door tests en als fallback). `Some(tx)` betekent:
     /// non-blocking enqueue via een bounded mpsc-channel.
@@ -86,6 +90,7 @@ impl<C: ClassifierLike> Clone for AppState<C> {
             classifier: Arc::clone(&self.classifier),
             api_key: self.api_key.clone(),
             shift_path: Arc::clone(&self.shift_path),
+            enabled_path: Arc::clone(&self.enabled_path),
             classify_tx: self.classify_tx.clone(),
         }
     }
@@ -109,6 +114,7 @@ impl<C: ClassifierLike> AppState<C> {
             classifier: Arc::new(classifier),
             api_key,
             shift_path: Arc::new(default_shift_path()),
+            enabled_path: Arc::new(default_enabled_path()),
             classify_tx: None,
         }
     }
@@ -117,6 +123,12 @@ impl<C: ClassifierLike> AppState<C> {
     /// filesystem state without touching the real user's `$HOME`).
     pub fn with_shift_path(mut self, path: PathBuf) -> Self {
         self.shift_path = Arc::new(path);
+        self
+    }
+
+    /// Override the enabled-flag path (used by tests).
+    pub fn with_enabled_path(mut self, path: PathBuf) -> Self {
+        self.enabled_path = Arc::new(path);
         self
     }
 
@@ -154,6 +166,24 @@ fn default_shift_path() -> PathBuf {
     home.join(".config").join("token-governor").join("shift")
 }
 
+/// Default on-disk location for the persistent governor-enabled flag.
+/// Same convention as `default_shift_path` — sibling file in the same dir.
+fn default_enabled_path() -> PathBuf {
+    let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+    home.join(".config").join("token-governor").join("enabled")
+}
+
+/// Read the persistent enabled-flag. Absent or unreadable file → enabled
+/// (fail-open: if the user has not opted in to disabling, the tool stays
+/// usable). Content `0` (with optional whitespace) → disabled. Anything
+/// else → enabled.
+fn read_enabled(path: &std::path::Path) -> bool {
+    match std::fs::read_to_string(path) {
+        Ok(s) => s.trim() != "0",
+        Err(_) => true,
+    }
+}
+
 /// Build the axum [`Router`] with all routes wired to the given state.
 ///
 /// Adds:
@@ -166,6 +196,10 @@ pub fn router<C: ClassifierLike>(state: AppState<C>) -> Router {
         .route("/classify", post(classify::<C>))
         .route("/cost", get(cost::<C>))
         .route("/shift", get(shift_get::<C>).post(shift_post::<C>))
+        .route(
+            "/governor/state",
+            get(governor_state_get::<C>).post(governor_state_post::<C>),
+        )
         .route("/reset", post(reset::<C>))
         .route("/recent", get(recent::<C>))
         .layer(TraceLayer::new_for_http())
@@ -373,6 +407,57 @@ async fn shift_post<C: ClassifierLike>(
     (StatusCode::OK, Json(ShiftBody { value })).into_response()
 }
 
+#[derive(Debug, Serialize, serde::Deserialize)]
+struct GovernorStateBody {
+    enabled: bool,
+}
+
+/// `GET /governor/state` — read the routing-enabled flag. Default `true`
+/// when no persistent file exists. Not auth-gated: read-only and the
+/// dashboard polls it from the same origin.
+async fn governor_state_get<C: ClassifierLike>(State(state): State<AppState<C>>) -> Response {
+    let enabled = read_enabled(state.enabled_path.as_ref());
+    (StatusCode::OK, Json(GovernorStateBody { enabled })).into_response()
+}
+
+/// `POST /governor/state` — set the routing-enabled flag. Body:
+/// `{"enabled": bool}`. Persists to `enabled_path` so the choice survives
+/// restart. Auth-gated like `/classify` when `state.api_key` is set —
+/// flipping the toggle is a write that affects every caller, so it
+/// inherits the same authentication as classification.
+async fn governor_state_post<C: ClassifierLike>(
+    State(state): State<AppState<C>>,
+    headers: HeaderMap,
+    body: Json<GovernorStateBody>,
+) -> Response {
+    if let Some(resp) = check_auth(&state, &headers) {
+        return resp;
+    }
+    let path = state.enabled_path.as_ref();
+    if let Some(parent) = path.parent()
+        && let Err(e) = std::fs::create_dir_all(parent)
+    {
+        return error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            &format!("create governor-state dir: {e}"),
+        );
+    }
+    let contents = if body.enabled { "1\n" } else { "0\n" };
+    if let Err(e) = std::fs::write(path, contents) {
+        return error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            &format!("write governor-state: {e}"),
+        );
+    }
+    (
+        StatusCode::OK,
+        Json(GovernorStateBody {
+            enabled: body.enabled,
+        }),
+    )
+        .into_response()
+}
+
 /// `GET /health` — simple liveness probe. Always 200, never auth-gated.
 async fn health() -> impl IntoResponse {
     Json(serde_json::json!({
@@ -407,6 +492,9 @@ async fn classify<C: ClassifierLike>(
 ) -> Response {
     if let Some(resp) = check_auth(&state, &headers) {
         return resp;
+    }
+    if !read_enabled(state.enabled_path.as_ref()) {
+        return error_response(StatusCode::SERVICE_UNAVAILABLE, "governor disabled");
     }
     let Json(req) = match body {
         Ok(j) => j,
@@ -1024,6 +1112,114 @@ mod tests {
         // De worker-response moet doorkomen, niet de FakeClassifier-response.
         assert_eq!(v["model_hint"], "queue-mock");
         assert_eq!(v["tier"], "hk");
+    }
+
+    /// Build a router with isolated tempdir-paths for both shift- and
+    /// enabled-files so toggle-tests cannot touch the real `$HOME`.
+    fn make_app_with_toggle_dir(
+        tmp: &tempfile::TempDir,
+        api_key: Option<String>,
+    ) -> Router {
+        let fake = FakeClassifier::ok(canned_response());
+        let state = AppState::new(fake, api_key)
+            .with_shift_path(tmp.path().join("shift"))
+            .with_enabled_path(tmp.path().join("enabled"));
+        router(state)
+    }
+
+    #[tokio::test]
+    async fn governor_state_get_defaults_to_enabled() {
+        let tmp = tempfile::tempdir().unwrap();
+        let app = make_app_with_toggle_dir(&tmp, None);
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/governor/state")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = read_body(resp).await;
+        let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(v["enabled"], true);
+    }
+
+    #[tokio::test]
+    async fn governor_state_post_persists_and_get_reads_back() {
+        let tmp = tempfile::tempdir().unwrap();
+        let app = make_app_with_toggle_dir(&tmp, None);
+        let post = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/governor/state")
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"enabled":false}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(post.status(), StatusCode::OK);
+
+        let on_disk = std::fs::read_to_string(tmp.path().join("enabled")).unwrap();
+        assert_eq!(on_disk.trim(), "0");
+
+        let get = app
+            .oneshot(
+                Request::builder()
+                    .uri("/governor/state")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let bytes = read_body(get).await;
+        let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(v["enabled"], false);
+    }
+
+    #[tokio::test]
+    async fn classify_returns_503_when_governor_disabled() {
+        let tmp = tempfile::tempdir().unwrap();
+        // Write `0` directly to simulate persisted disabled state.
+        std::fs::write(tmp.path().join("enabled"), "0\n").unwrap();
+        let app = make_app_with_toggle_dir(&tmp, None);
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/classify")
+                    .header("content-type", "application/json")
+                    .body(Body::from(valid_request_body()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+        let bytes = read_body(resp).await;
+        let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(v["error"], "governor disabled");
+    }
+
+    #[tokio::test]
+    async fn governor_state_post_requires_auth_when_key_set() {
+        let tmp = tempfile::tempdir().unwrap();
+        let app = make_app_with_toggle_dir(&tmp, Some("secret-key".into()));
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/governor/state")
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"enabled":false}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[tokio::test]
