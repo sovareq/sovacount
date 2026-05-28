@@ -14,12 +14,22 @@ name = "sovacount-launcher"
 path = "src/main.rs"
 
 [dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Logging — cross-platform, gebruikt op alle OSes voor de stub-main.
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+
+# macOS-only deps. Het launcher-crate is een macOS `.app`-shell rond wry+tao;
+# op Linux zou `wry` glib/gtk system-libs vereisen en op Windows is er nog
+# geen launcher-strategie. Door target-cfg te gebruiken bouwt het crate op
+# alle 3 CI-platforms als een stub-binary die "macOS-only" eprintln't.
+[target.'cfg(target_os = "macos")'.dependencies]
 # UI stack — versies bewust gepind op de werkende combo. Een version-bump
 # (wry 0.55 + tao 0.35) staat gepland voor een aparte tranche.
 wry = { version = "0.48", default-features = false, features = ["protocol"] }
 tao = "0.32"
-serde = { workspace = true }
-serde_json = { workspace = true }
 
 # Process-lifecycle hardening.
 #
@@ -41,12 +51,6 @@ signal-hook = "0.3"
 # Direct kill() syscall voor SIGTERM naar de child voor een graceful-shutdown
 # poging voordat we kill_tree() inschakelen.
 libc = "0.2"
-
-# Logging naar bestand (~/Library/Logs/SovaCount.log op macOS). Zonder dit
-# blijft elk launcher-probleem onzichtbaar (child stdio is Stdio::null en
-# bij .app-launch heeft de launcher zelf geen terminal).
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 
 # Geen externe HTTP-client nodig — launcher spawnt het lokale `governor-http`
 # binary als child process en praat ermee via /health endpoint via stdlib.
