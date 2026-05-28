@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **HTTP endpoint `GET`/`POST /governor/state`**: persistent routing-toggle
+  (`{"enabled": bool}`). When disabled, `/classify` returns 503
+  `"governor disabled"`. State persists at `~/.config/token-governor/enabled`.
+  Dashboard exposes a pill toggle in the header.
+- **HTTP endpoint `GET`/`POST /display/mode`**: dashboard display-mode
+  preference (`usd` / `tokens` / `auto`). Auto-detect heuristic checks
+  `~/.claude/projects/**/*.jsonl` presence to infer Pro/Max OAuth-subscription
+  vs raw API-key usage. Persists at `~/.config/token-governor/display_mode`.
+  Surfaces in dashboard as a 3-segment pill toggle that CSS-hides USD columns
+  in subscription mode.
+- **macOS distribution pipeline**: `scripts/package-macos.sh` (ad-hoc /
+  developer-id / notarize modes), `crates/governor-launcher-gui/entitlements.plist`
+  (Hardened Runtime: JIT + network-client, no sandbox), GitHub Actions workflow
+  `.github/workflows/macos-release.yml` (tag-triggered, auto-detects sign mode
+  from repository secrets), `docs/distribution.md` full pipeline guide.
+- **Production-grade launcher lifecycle**: `ChildGuard` Drop-impl with
+  `kill_tree` cleanup, `signal-hook` SIGTERM/SIGINT handlers, `tao::LoopDestroyed`
+  arm, `single-instance` flock on `/tmp/com.sovareq.sovacount.launcher`,
+  `SOVACOUNT_LAUNCHER_GUARD` env-guard, `tracing` to `~/Library/Logs/SovaCount.log`.
+  Three defense layers against orphan `governor-http` processes.
+
 ### Changed
 - **License: UNLICENSED (proprietary) → MIT.** Public repo + proprietary license
   was juridically weak — anyone could clone the source but had no rights.
@@ -17,6 +39,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `github.com/sovareq/sovacount`. Codeberg-mirror existed in the v0.3 metadata
   but the canonical repo lives on GitHub since the rename from `brainzzlab-hub`
   (May 2026).
+- **Launcher crate target-cfg macOS-only**: `wry`, `tao`, `kill_tree`,
+  `single-instance`, `signal-hook`, `libc` moved under
+  `[target.'cfg(target_os = "macos")'.dependencies]`. Stub-main on Linux/Windows
+  prints "macOS-only" and exits with code 2. Unblocks `cargo build --workspace`
+  on ubuntu/windows CI runners that lack `glib-2.0` system libs.
+- **Launcher `pkill -f governor-http` fallback removed**: multi-user security
+  violation. PID-tracking only via `ChildGuard`; UI surfaces explicit error
+  when no tracked child exists.
+
+### Fixed
+- **Launcher `single-instance` macOS Sequoia 15.5 init**: `SingleInstance::new()`
+  failed with "file open or create error" when the key used dotted-notation.
+  Fix: explicit `/tmp`-based lock-file path. Made the check non-fatal so the
+  launcher falls back to env-guard + `tao::LoopDestroyed` if the lock can't
+  be acquired.
+
+### Internal
+- `governor-launcher-gui/src/main.rs`: `#![deny(unsafe_code)]` at crate-level
+  with two scoped `#[allow(unsafe_code)]` exceptions (`libc::kill` graceful
+  SIGTERM, `std::env::set_var` for fork-bomb env-guard — Rust 2024 marks the
+  latter unsafe).
+- 8 new HTTP tests across `/governor/state` (4) and `/display/mode` (4) —
+  workspace test-count 23 → 31.
 
 ## [0.3.0] — 2026-05-26
 
