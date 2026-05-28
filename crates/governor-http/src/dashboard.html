@@ -273,6 +273,65 @@
     border: 1px solid var(--color-ink);
   }
 
+  .governor-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-left: var(--space-3);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    font-weight: 700;
+    padding: 6px var(--space-4);
+    border-radius: 999px;
+    cursor: pointer;
+    user-select: none;
+    background: var(--color-surface-sunken);
+    border: 2px solid var(--color-ink);
+    color: var(--color-ink);
+    transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease, transform 0.12s ease, box-shadow 0.18s ease;
+    min-width: 88px;
+    justify-content: center;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .governor-toggle[data-enabled="true"] {
+    background: var(--color-accent);
+    color: #fff;
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px rgba(0, 82, 200, 0.18);
+  }
+  .governor-toggle[data-enabled="false"] {
+    background: #c2261b;
+    color: #fff;
+    border-color: #c2261b;
+    box-shadow: 0 0 0 3px rgba(194, 38, 27, 0.22);
+  }
+  .governor-toggle:hover { filter: brightness(1.05); transform: translateY(-1px); }
+  .governor-toggle:active { transform: translateY(0); }
+  .governor-toggle:disabled { opacity: 0.5; cursor: wait; }
+
+  .toast {
+    position: fixed;
+    bottom: var(--space-6);
+    right: var(--space-6);
+    padding: var(--space-3) var(--space-5);
+    border-radius: 8px;
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: #fff;
+    background: var(--color-ink);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    pointer-events: none;
+    z-index: 1000;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .toast.toast-ok { background: var(--color-accent); }
+  .toast.toast-off { background: #c2261b; }
+
   footer {
     text-align: center;
     color: var(--color-ink-muted);
@@ -492,8 +551,12 @@
 </style>
 </head>
 <body>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
 <header>
-  <h1>SovaCount <span class="health-pill health-ok" id="health">●</span></h1>
+  <h1>SovaCount
+    <span class="health-pill health-ok" id="health">●</span>
+    <button type="button" class="governor-toggle" id="governor-toggle" data-enabled="true" title="Schakel routing aan/uit. Uit = /classify geeft 503 'governor disabled' terug.">⏻ AAN</button>
+  </h1>
   <div class="sub">
     token-governor dashboard ·
     <a href="https://sovareq.com" target="_blank">sovareq.com</a> ·
@@ -697,6 +760,54 @@ async function refreshCost() {
   }
 }
 
+let toastTimer = null;
+function showToast(msg, kind) {
+  const el = document.getElementById('toast');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.remove('toast-ok', 'toast-off');
+  if (kind) el.classList.add(kind);
+  el.classList.add('show');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+async function refreshGovernorState() {
+  const s = await fetchJson('/governor/state');
+  const btn = document.getElementById('governor-toggle');
+  if (!btn) return;
+  const enabled = s ? !!s.enabled : true;
+  btn.dataset.enabled = enabled ? 'true' : 'false';
+  btn.textContent = enabled ? '⏻ AAN' : '⏻ UIT';
+  btn.title = enabled
+    ? 'Routing ACTIEF. Klik om uit te schakelen — /classify geeft dan 503.'
+    : 'Routing UIT. Klik om aan te zetten — /classify accepteert dan weer requests.';
+}
+
+document.getElementById('governor-toggle').addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
+  if (btn.disabled) return;
+  btn.disabled = true;
+  const next = btn.dataset.enabled !== 'true';
+  let ok = false;
+  try {
+    const resp = await fetchJson('/governor/state', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: next }),
+    });
+    ok = resp !== null;
+  } finally {
+    btn.disabled = false;
+    await refreshGovernorState();
+    if (ok) {
+      showToast(next ? 'Routing AAN — /classify accepteert requests' : 'Routing UIT — /classify geeft 503', next ? 'toast-ok' : 'toast-off');
+    } else {
+      showToast('Kan toggle niet wijzigen — server bereikbaar?', 'toast-off');
+    }
+  }
+});
+
 async function refreshShift() {
   const s = await fetchJson('/shift');
   if (!s) return;
@@ -872,7 +983,7 @@ resetBtn.addEventListener('click', async () => {
 });
 
 async function refreshAll() {
-  await Promise.all([refreshHealth(), refreshCost(), refreshShift()]);
+  await Promise.all([refreshHealth(), refreshCost(), refreshShift(), refreshGovernorState()]);
 }
 
 refreshAll();

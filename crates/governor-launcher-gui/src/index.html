@@ -296,6 +296,18 @@
     }
   };
 
+  // Backend roept window.sovaError(message) bij niet-fatale launcher-fouten
+  // (governor-http binary niet gevonden, spawn-fail, etc.). Tonen als rode
+  // feedback-balk + auto-dismiss na 6s.
+  let _errorTimer = null;
+  window.sovaError = function(msg) {
+    showFeedback('⚠ ' + msg, 'err');
+    if (_errorTimer) clearTimeout(_errorTimer);
+    _errorTimer = setTimeout(() => {
+      showFeedback('', '');
+    }, 6000);
+  };
+
   // Init state
   render();
 </script>

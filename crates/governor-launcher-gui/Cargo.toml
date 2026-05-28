@@ -14,10 +14,43 @@ name = "sovacount-launcher"
 path = "src/main.rs"
 
 [dependencies]
-wry = { version = "0.48", default-features = false, features = ["protocol"] }
-tao = "0.32"
 serde = { workspace = true }
 serde_json = { workspace = true }
+
+# Logging — cross-platform, gebruikt op alle OSes voor de stub-main.
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+
+# macOS-only deps. Het launcher-crate is een macOS `.app`-shell rond wry+tao;
+# op Linux zou `wry` glib/gtk system-libs vereisen en op Windows is er nog
+# geen launcher-strategie. Door target-cfg te gebruiken bouwt het crate op
+# alle 3 CI-platforms als een stub-binary die "macOS-only" eprintln't.
+[target.'cfg(target_os = "macos")'.dependencies]
+# UI stack — versies bewust gepind op de werkende combo. Een version-bump
+# (wry 0.55 + tao 0.35) staat gepland voor een aparte tranche.
+wry = { version = "0.48", default-features = false, features = ["protocol"] }
+tao = "0.32"
+
+# Process-lifecycle hardening.
+#
+# `kill_tree` doet een recursieve walk van de proces-boom via `ps` op macOS
+# en stuurt SIGKILL naar de hele subtree. Voorkomt orphan `governor-http`
+# als de launcher panic't of force-killed wordt.
+kill_tree = "0.2"
+
+# `single-instance` schrijft een flock-based lock op /tmp om te voorkomen dat
+# een Finder-double-click een tweede launcher spawnt die op dezelfde poort
+# probeert te binden (zou silent falen).
+single-instance = "0.3"
+
+# `signal-hook` registreert handlers voor SIGTERM/SIGINT die de Drop-guard
+# triggeren via een AtomicBool. Werkt zonder Tokio-runtime — bewust geen
+# Tokio omdat de tao EventLoop niet-async is.
+signal-hook = "0.3"
+
+# Direct kill() syscall voor SIGTERM naar de child voor een graceful-shutdown
+# poging voordat we kill_tree() inschakelen.
+libc = "0.2"
 
 # Geen externe HTTP-client nodig — launcher spawnt het lokale `governor-http`
 # binary als child process en praat ermee via /health endpoint via stdlib.

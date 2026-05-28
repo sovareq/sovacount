@@ -59,7 +59,7 @@ In april 2026 classifeerden de gangbare tiered-routers (TokenMix.ai, Morph Route
 ### Vanuit source
 
 ```bash
-git clone https://codeberg.org/sovareq_bv/sovacount.git
+git clone https://github.com/sovareq/sovacount.git
 cd sovacount
 cargo build --release --workspace
 
@@ -70,7 +70,31 @@ cp target/release/{tier-classify,governor-http,governor-mcp,sovacount-launcher} 
 
 Cargo workspace is `edition = "2024"`, `rust-version = "1.94"` (zie [`Cargo.toml`](Cargo.toml) workspace.package). Toolchain-pin in [`rust-toolchain.toml`](rust-toolchain.toml).
 
-Alle crates dragen `#![forbid(unsafe_code)]`.
+Alle product-crates dragen `#![forbid(unsafe_code)]` — alleen `governor-launcher-gui` heeft één `unsafe` block voor de `libc::kill(pid, SIGTERM)` syscall (gedocumenteerd in [`main.rs`](crates/governor-launcher-gui/src/main.rs)).
+
+### macOS — `.app`-launcher bundelen
+
+De `LAUNCHER/SovaCount.app/Contents/MacOS/sovacount-launcher` in de repo is een
+ontwikkel-stub. Voor een werkende `.app` gebruik je het package-script:
+
+```bash
+# Ad-hoc signing (eigen Mac, geen Apple Account nodig)
+./scripts/package-macos.sh
+
+# Verplaats naar Applications/
+cp -R dist/SovaCount.app ~/Applications/
+
+# Eerste run zonder quarantine-prompt (gebouwd op dezelfde Mac):
+open ~/Applications/SovaCount.app
+```
+
+Het script bouwt `governor-http` + `sovacount-launcher`, kopieert ze naar
+`dist/SovaCount.app/Contents/{MacOS,Resources}/`, en doet `codesign`. De
+launcher vindt `governor-http` automatisch in `Contents/Resources/` —
+geen extra `~/.local/bin/` install nodig voor de `.app`-flow.
+
+Voor distributie naar andere Macs (Developer ID + notarization), zie
+[`docs/distribution.md`](docs/distribution.md).
 
 ## Quickstart — CLI (`tier-classify`)
 
@@ -143,6 +167,8 @@ curl -X POST http://127.0.0.1:8989/classify \
 | `POST` | `/shift` | Zet persistente gear-lever (`{"value": -2..=2}`) |
 | `GET` | `/recent` | Laatste 20 classify-responses, gesorteerd op mtime DESC (voor dashboard live-feed) |
 | `POST` | `/reset` | Wis alle `.json`-bestanden uit de classifier-cache. Returnt `{"deleted_files": N, "cache_dir": "..."}` |
+| `GET` | `/governor/state` | Lees routing-toggle (`{"enabled": bool}`). Absent state-file = `true` (fail-open). |
+| `POST` | `/governor/state` | Zet routing-toggle (`{"enabled": bool}`). Bij `false` retourneert `/classify` 503 `"governor disabled"`. Gepersisteerd naar `~/.config/token-governor/enabled`. Auth-gated als API-key gezet. |
 
 ### Auth (optioneel)
 
@@ -196,6 +222,7 @@ Bij startup leest de launcher `~/.config/sovacount/anthropic-key` (chmod 600 fil
 
 `GET /` toont een single-file dashboard in Sovareq design-tokens (geen externe CDN, geen woff2-fetch). Secties:
 
+- **Aan/uit-toggle** — pill naast health-badge in header; één klik schakelt routing aan/uit. Server-side state, vendor-agnostisch — elke client erft de toggle zonder per-client config.
 - **Bespaard t.o.v. altijd-Opus** — savings-banner (procent + dollar)
 - **Per tier** — HAIKU / SONNET / OPUS calls + cumulative spend
 - **Tier-shift (gear-lever)** — drie-knops UI om globaal `-1` / `0` / `+1` shift te kiezen (verstuurt naar `/shift`)
@@ -204,7 +231,7 @@ Bij startup leest de launcher `~/.config/sovacount/anthropic-key` (chmod 600 fil
 - **Per dag** — aggregate per UTC-datum (Calls / Kost / Bespaard)
 - **Classify een taak** — direct LLM-classify-knop, voor handmatige experimenten
 
-Polling-intervallen: `/cost`/`/shift`/`/health` elke 5s; `/recent` elke 2s.
+Polling-intervallen: `/cost`/`/shift`/`/health`/`/governor/state` elke 5s; `/recent` elke 2s.
 
 ## Configuratie
 
