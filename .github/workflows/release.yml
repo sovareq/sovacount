@@ -1,5 +1,25 @@
 name: Release
 
+# Triggered on `git tag vX.Y.Z` push (or manual workflow_dispatch with a
+# tag input). Builds release binaries on every supported target, packages
+# them, and publishes a GitHub Release.
+#
+# Supported targets (all CI-hosted runners, no self-hosted needed):
+#
+#   - aarch64-apple-darwin     — Apple Silicon Macs (M-series)
+#   - x86_64-apple-darwin      — Intel Macs
+#   - x86_64-unknown-linux-gnu — Linux x86_64
+#   - x86_64-pc-windows-msvc   — Windows x86_64
+#
+# Each archive contains the three cross-platform binaries:
+#   - tier-classify     CLI
+#   - governor-http     HTTP server + dashboard
+#   - governor-mcp      MCP stdio server
+#
+# On macOS we ALSO produce a SovaCount.app.zip bundle (ad-hoc signed —
+# users on a fresh Mac will need to `xattr -dr com.apple.quarantine` once
+# after download, since we don't pay for an Apple Developer ID).
+
 on:
   push:
     tags:
@@ -7,7 +27,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to release (e.g. v0.1.0)"
+        description: "Tag to release (e.g. v0.4.0)"
         required: true
 
 permissions:
@@ -24,7 +44,11 @@ jobs:
       matrix:
         include:
           - target: aarch64-apple-darwin
-            os: macos-latest
+            os: macos-14         # GitHub-hosted Apple Silicon
+            archive: tar.gz
+            exe_suffix: ""
+          - target: x86_64-apple-darwin
+            os: macos-13         # GitHub-hosted Intel runner
             archive: tar.gz
             exe_suffix: ""
           - target: x86_64-unknown-linux-gnu
@@ -49,25 +73,38 @@ jobs:
         with:
           shared-key: release-${{ matrix.target }}
 
-      - name: Build binaries (release)
+      - name: Build CLI / HTTP / MCP binaries
         run: |
-          cargo build --release --workspace --target ${{ matrix.target }}
+          cargo build --release --target ${{ matrix.target }} \
+            -p governor-cli -p governor-http -p governor-mcp
 
-      - name: Package archive
-        id: package
+      - name: Build sovacount-launcher (macOS only)
+        if: contains(matrix.target, 'apple-darwin')
+        run: |
+          cargo build --release --target ${{ matrix.target }} -p governor-launcher-gui
+
+      - name: Resolve release tag
+        id: tag
         shell: bash
         run: |
           REF="${{ github.ref_name }}"
           if [ -n "${{ github.event.inputs.tag }}" ]; then
             REF="${{ github.event.inputs.tag }}"
           fi
-          NAME="token-governor-${REF}-${{ matrix.target }}"
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+
+      - name: Package CLI archive
+        id: package
+        shell: bash
+        run: |
+          REF="${{ steps.tag.outputs.ref }}"
+          NAME="sovacount-${REF}-${{ matrix.target }}"
           STAGE="$(mktemp -d)/$NAME"
           EXT="${{ matrix.exe_suffix }}"
           mkdir -p "$STAGE"
           cp "target/${{ matrix.target }}/release/tier-classify${EXT}" "$STAGE/"
-          cp "target/${{ matrix.target }}/release/governor-http${EXT}" "$STAGE/"
-          cp "target/${{ matrix.target }}/release/governor-mcp${EXT}" "$STAGE/"
+          cp "target/${{ matrix.target }}/release/governor-http${EXT}"  "$STAGE/"
+          cp "target/${{ matrix.target }}/release/governor-mcp${EXT}"   "$STAGE/"
           cp README.md LICENSE CHANGELOG.md "$STAGE/"
           if [ "${{ matrix.archive }}" = "zip" ]; then
             ARCHIVE="$NAME.zip"
@@ -76,14 +113,46 @@ jobs:
             ARCHIVE="$NAME.tar.gz"
             tar -C "$(dirname "$STAGE")" -czf "$ARCHIVE" "$NAME"
           fi
-          # SHA-256 — sha256sum on Linux/Windows-runners (git-bash), shasum on macOS.
+          # SHA-256: `sha256sum` on Linux/Windows (git-bash), `shasum` on macOS.
           if command -v sha256sum >/dev/null 2>&1; then
             sha256sum "$ARCHIVE" > "$ARCHIVE.sha256"
           else
             shasum -a 256 "$ARCHIVE" > "$ARCHIVE.sha256"
           fi
-          echo "archive=$ARCHIVE" >> "$GITHUB_OUTPUT"
+          echo "archive=$ARCHIVE"   >> "$GITHUB_OUTPUT"
           echo "checksum=$ARCHIVE.sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Package SovaCount.app (macOS only)
+        id: appbundle
+        if: contains(matrix.target, 'apple-darwin')
+        shell: bash
+        run: |
+          REF="${{ steps.tag.outputs.ref }}"
+          APP_NAME="SovaCount-${REF}-${{ matrix.target }}.app.zip"
+          # Build the .app from the just-built binaries. We deliberately do
+          # NOT call package-macos.sh because that one re-runs cargo build
+          # for the host triple; we want to use the binaries from
+          # target/${{ matrix.target }}/release/ directly.
+          DIST="dist/${{ matrix.target }}"
+          rm -rf "$DIST"
+          mkdir -p "$DIST/SovaCount.app/Contents/MacOS" "$DIST/SovaCount.app/Contents/Resources"
+          cp "target/${{ matrix.target }}/release/sovacount-launcher" "$DIST/SovaCount.app/Contents/MacOS/"
+          cp "target/${{ matrix.target }}/release/governor-http"      "$DIST/SovaCount.app/Contents/Resources/"
+          cp LAUNCHER/SovaCount.app/Contents/Info.plist               "$DIST/SovaCount.app/Contents/"
+          if [ -f LAUNCHER/SovaCount.app/Contents/Resources/icon.icns ]; then
+            cp LAUNCHER/SovaCount.app/Contents/Resources/icon.icns "$DIST/SovaCount.app/Contents/Resources/"
+          fi
+          xattr -cr "$DIST/SovaCount.app"
+          # Ad-hoc sign (no paid Developer ID — users will need to `xattr
+          # -dr com.apple.quarantine` after download, documented in README).
+          codesign --sign - --deep --force --options runtime \
+            --entitlements crates/governor-launcher-gui/entitlements.plist \
+            "$DIST/SovaCount.app"
+          # Zip with ditto so resource forks + macOS metadata survive.
+          (cd "$DIST" && ditto -c -k --sequesterRsrc --keepParent SovaCount.app "$OLDPWD/$APP_NAME")
+          shasum -a 256 "$APP_NAME" > "$APP_NAME.sha256"
+          echo "app_zip=$APP_NAME"           >> "$GITHUB_OUTPUT"
+          echo "app_sha=$APP_NAME.sha256"    >> "$GITHUB_OUTPUT"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -92,6 +161,9 @@ jobs:
           path: |
             ${{ steps.package.outputs.archive }}
             ${{ steps.package.outputs.checksum }}
+            ${{ steps.appbundle.outputs.app_zip }}
+            ${{ steps.appbundle.outputs.app_sha }}
+          if-no-files-found: error
 
   release:
     name: Publish GitHub Release
@@ -110,6 +182,7 @@ jobs:
         with:
           tag_name: ${{ github.ref_name || github.event.inputs.tag }}
           generate_release_notes: true
+          fail_on_unmatched_files: true
           files: |
             artifacts/**/*.tar.gz
             artifacts/**/*.tar.gz.sha256
