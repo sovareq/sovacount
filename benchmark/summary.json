@@ -1,0 +1,16 @@
+{
+  "datum_utc": "2026-05-26T02:21:01.573574",
+  "sovacount_url": "http://127.0.0.1:8990",
+  "provider": "anthropic",
+  "taken": 10,
+  "tier_distribution": {
+    "hk": 2,
+    "so": 7,
+    "op": 1
+  },
+  "real_test_taken": 5,
+  "real_test_total_suggested_usd": 0.0561,
+  "real_test_total_opus_usd": 0.4714,
+  "real_test_savings_usd": 0.4154,
+  "real_test_savings_pct": 88.1
+}
