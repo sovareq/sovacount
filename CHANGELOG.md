@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **License: UNLICENSED (proprietary) → MIT.** Public repo + proprietary license
+  was juridically weak — anyone could clone the source but had no rights.
+  `LICENSE` file replaced with standard MIT-text (Copyright Bjorn Lambrechts),
+  `workspace.package.license = "MIT"` in `Cargo.toml`, README license-section
+  rewritten, `deny.toml` license-comment updated.
+- **Repository fields**: `codeberg.org/sovareq_bv/sovacount` →
+  `github.com/sovareq/sovacount`. Codeberg-mirror existed in the v0.3 metadata
+  but the canonical repo lives on GitHub since the rename from `brainzzlab-hub`
+  (May 2026).
+
 ## [0.3.0] — 2026-05-26
 
 ### Added

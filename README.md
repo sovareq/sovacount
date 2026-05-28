@@ -382,9 +382,11 @@ Edition 2024, MSRV 1.94+ (pin in [`rust-toolchain.toml`](rust-toolchain.toml)).
 
 ## License
 
-**UNLICENSED** (proprietary, all rights reserved) — `workspace.package.license = "UNLICENSED"` in [`Cargo.toml`](Cargo.toml).
+**[MIT License](LICENSE)** — `workspace.package.license = "MIT"` in [`Cargo.toml`](Cargo.toml).
 
-SovaCount is **niet gelicenseerd voor externe redistributie**. Intern Sovareq-gebruik. Klant-toegang vereist een aparte NDA + pilot-overeenkomst; contact <bjorn@sovareq.com>.
+Copyright (c) 2026 Bjorn Lambrechts &lt;<bjorn@sovareq.com>&gt;.
+
+SovaCount is open-source software, free to use, fork, modify, and redistribute under the terms of the MIT license. Sovareq's first publicly-released tool (April 2026).
 
 ---
 
