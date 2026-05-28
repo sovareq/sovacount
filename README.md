@@ -2,6 +2,10 @@
 
 > **Cost-optimizing classifier for AI-agent tasks. Tags work with `@op` / `@so` / `@hk` so cheaper models handle simpler work.**
 
+> **Stack-vriendelijk met [Caveman](https://github.com/JuliusBrussee/caveman)** —
+> Caveman comprimeert *output* (~75% kortere LLM-responses), SovaCount routeert
+> *input* naar goedkopere tiers. Gebruik los, samen voor dubbele savings.
+
 > **Externe naam:** SovaCount. De interne module-naam is `token-governor` /
 > `governor-*` en wordt zo behouden in alle Rust-crates en binary-namen.
 
@@ -381,6 +385,17 @@ Output-tags die SovaCount produceert + bedoelde gebruik:
 | `@op` | Opus-class | Architectuur: refactors >300 LOC, multi-tenant security, threat-modeling, cross-system migraties |
 
 Een caller (wrapper-script, MCP-hook, ...) leest het tag uit het response-veld `tier` en stuurt het werk naar het overeenkomstige Anthropic/OpenAI/Ollama model.
+
+## Werkt samen met Caveman
+
+Caveman = output-compressie via instructie-tweak. SovaCount = input-routering naar tier-juiste model. Twee onafhankelijke lagen, beide besparen tokens — geen integratie-werk nodig, beide leven los in de Claude Code-hook-laag.
+
+| Tool | Werkt op | Bespaart |
+|---|---|---|
+| [Caveman](https://github.com/JuliusBrussee/caveman) (door [@JuliusBrussee](https://github.com/JuliusBrussee)) | LLM-output | ~75% minder response-tokens via terse-instructie |
+| **SovaCount** | LLM-input | Goedkoper model per scope (HK / SO / OP) |
+
+Stack: SovaCount routet naar HK + Caveman comprimeert HK's antwoord = max win. Of gebruik elk los — SovaCount draait standalone als HTTP-server / MCP / CLI zonder Caveman te kennen, en omgekeerd.
 
 ## Roadmap
 
