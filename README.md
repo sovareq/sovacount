@@ -56,6 +56,23 @@ In april 2026 classifeerden de gangbare tiered-routers (TokenMix.ai, Morph Route
 
 ## Install
 
+### Een-regel-install (aanbevolen)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/sovareq/sovacount/main/scripts/install.sh | bash
+```
+
+Detecteert je platform (macOS arm64/Intel, Linux x86_64, Windows x86_64),
+downloadt de meest recente release, verifieert SHA-256, installeert de
+binaries in `~/.local/bin/`. Op macOS plaatst het ook
+`~/Applications/SovaCount.app` en strip't de quarantine-xattr.
+
+Specifieke versie?
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/sovareq/sovacount/main/scripts/install.sh | bash -s -- --version v0.4.0
+```
+
 ### Vanuit source
 
 ```bash
@@ -63,38 +80,44 @@ git clone https://github.com/sovareq/sovacount.git
 cd sovacount
 cargo build --release --workspace
 
-# Installeer alle binaries in PATH
 mkdir -p ~/.local/bin
 cp target/release/{tier-classify,governor-http,governor-mcp,sovacount-launcher} ~/.local/bin/
 ```
 
-Cargo workspace is `edition = "2024"`, `rust-version = "1.94"` (zie [`Cargo.toml`](Cargo.toml) workspace.package). Toolchain-pin in [`rust-toolchain.toml`](rust-toolchain.toml).
+Cargo workspace = `edition = "2024"`, `rust-version = "1.94"`. Alle
+product-crates dragen `#![forbid(unsafe_code)]` — alleen
+`governor-launcher-gui` heeft 2 scoped `unsafe`-blocks (`libc::kill` voor
+graceful SIGTERM, `std::env::set_var` voor fork-bomb env-guard).
 
-Alle product-crates dragen `#![forbid(unsafe_code)]` — alleen `governor-launcher-gui` heeft één `unsafe` block voor de `libc::kill(pid, SIGTERM)` syscall (gedocumenteerd in [`main.rs`](crates/governor-launcher-gui/src/main.rs)).
+### macOS — `.app` lokaal bouwen
 
-### macOS — `.app`-launcher bundelen
-
-De `LAUNCHER/SovaCount.app/Contents/MacOS/sovacount-launcher` in de repo is een
-ontwikkel-stub. Voor een werkende `.app` gebruik je het package-script:
+Als je niet de release-zip gebruikt:
 
 ```bash
-# Ad-hoc signing (eigen Mac, geen Apple Account nodig)
-./scripts/package-macos.sh
-
-# Verplaats naar Applications/
+./scripts/package-macos.sh                    # ad-hoc sign, geen Apple Account
 cp -R dist/SovaCount.app ~/Applications/
-
-# Eerste run zonder quarantine-prompt (gebouwd op dezelfde Mac):
 open ~/Applications/SovaCount.app
 ```
 
-Het script bouwt `governor-http` + `sovacount-launcher`, kopieert ze naar
-`dist/SovaCount.app/Contents/{MacOS,Resources}/`, en doet `codesign`. De
-launcher vindt `governor-http` automatisch in `Contents/Resources/` —
-geen extra `~/.local/bin/` install nodig voor de `.app`-flow.
+Het script bouwt + bundelt + signt. De launcher vindt `governor-http`
+automatisch in `Contents/Resources/`.
 
-Voor distributie naar andere Macs (Developer ID + notarization), zie
-[`docs/distribution.md`](docs/distribution.md).
+### macOS Gatekeeper-noot
+
+We betalen geen $99/jaar Apple Developer ID — SovaCount is een gratis
+open-source tool. De ZIP-bundles in GitHub-releases zijn **ad-hoc
+gesigned**, niet notarized. Op een verse Mac die de bundle via een
+browser downloadt zal Gatekeeper "kan niet geopend worden" zeggen.
+
+`install.sh` doet dit automatisch voor je. Als je handmatig downloadt:
+
+```bash
+xattr -dr com.apple.quarantine ~/Applications/SovaCount.app
+```
+
+Eénmalig, daarna werkt dubbelklikken normaal.
+
+Volledige distributie-doc: [`docs/distribution.md`](docs/distribution.md).
 
 ## Quickstart — CLI (`tier-classify`)
 

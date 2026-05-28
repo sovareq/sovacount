@@ -8,6 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Cross-platform release workflow**: `.github/workflows/release.yml`
+  builds CLI binaries for `aarch64-apple-darwin`, `x86_64-apple-darwin`,
+  `x86_64-unknown-linux-gnu`, `x86_64-pc-windows-msvc` on tag-push.
+  macOS jobs also produce an ad-hoc-signed `SovaCount.app.zip` bundle.
+  Replaces the macOS-only `macos-release.yml` (which was tied to a paid
+  Apple Developer ID path Sovareq chose not to take).
+- **`scripts/install.sh`**: one-line installer. Detects platform,
+  downloads matching release archive, verifies SHA-256, installs to
+  `~/.local/bin/`. On macOS also extracts `SovaCount.app` to
+  `~/Applications/` and strips the quarantine xattr so Gatekeeper
+  accepts the ad-hoc-signed bundle without manual `xattr` invocation.
+- **README install-section rewritten**: one-line install is now the
+  primary path; `cargo build` is documented as the dev-fallback. Adds
+  an explicit "macOS Gatekeeper-noot" explaining why we don't notarize.
+
+### Added (HTTP / dashboard — earlier in this Unreleased cycle)
 - **HTTP endpoint `GET`/`POST /governor/state`**: persistent routing-toggle
   (`{"enabled": bool}`). When disabled, `/classify` returns 503
   `"governor disabled"`. State persists at `~/.config/token-governor/enabled`.
