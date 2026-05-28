@@ -310,6 +310,64 @@
   .governor-toggle:active { transform: translateY(0); }
   .governor-toggle:disabled { opacity: 0.5; cursor: wait; }
 
+  /* Display-mode toggle: 3-state pill (USD / Auto / Subscription). Each
+     segment is a button; the active one gets `[aria-pressed="true"]`. */
+  .display-mode-toggle {
+    display: inline-flex;
+    margin-left: var(--space-3);
+    border: var(--border-thin);
+    border-radius: 999px;
+    overflow: hidden;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    background: var(--color-surface);
+    user-select: none;
+  }
+  .display-mode-toggle button {
+    border: 0;
+    background: transparent;
+    color: var(--color-ink-muted);
+    padding: 4px var(--space-3);
+    cursor: pointer;
+    font: inherit;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .display-mode-toggle button:not(:last-child) {
+    border-right: 1px solid var(--color-border-strong);
+  }
+  .display-mode-toggle button[aria-pressed="true"] {
+    background: var(--color-accent);
+    color: #fff;
+  }
+  .display-mode-toggle button:hover:not([aria-pressed="true"]) {
+    background: var(--color-surface-sunken);
+    color: var(--color-ink);
+  }
+
+  /* Mode-driven visibility. USD-only cells (cost columns, dollar labels)
+     are hidden when the user is on a flat-rate Claude Code subscription
+     where USD numbers carry no information. `tokens-only` cells are the
+     inverse — visible only when we're rendering token-equivalent data. */
+  body[data-display-mode="tokens"] .usd-col { display: none !important; }
+  body[data-display-mode="tokens"] .tokens-only { display: revert; }
+  body[data-display-mode="usd"]    .tokens-only { display: none; }
+  /* Default (no body attr set yet, e.g. during initial fetch): show USD
+     so the page never flickers a blank pricing column. */
+  .tokens-only { display: none; }
+
+  /* Subscription-mode footer disclaimer. Sits under the savings banner
+     to explain why USD columns disappeared. */
+  .mode-disclaimer {
+    margin-top: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    border-left: 3px solid var(--color-accent);
+    background: var(--color-surface-sunken);
+    color: var(--color-ink-muted);
+    font-size: var(--text-sm);
+    line-height: 1.5;
+  }
+
   .toast {
     position: fixed;
     bottom: var(--space-6);
@@ -556,6 +614,11 @@
   <h1>SovaCount
     <span class="health-pill health-ok" id="health">●</span>
     <button type="button" class="governor-toggle" id="governor-toggle" data-enabled="true" title="Schakel routing aan/uit. Uit = /classify geeft 503 'governor disabled' terug.">⏻ AAN</button>
+    <span class="display-mode-toggle" id="display-mode-toggle" role="group" aria-label="Display mode">
+      <button type="button" data-mode="usd"    aria-pressed="false" title="USD-modus — toon dollarbedragen (pay-per-token API gebruikers)">USD</button>
+      <button type="button" data-mode="auto"   aria-pressed="true"  title="Auto-detecteer — kies modus op basis van OAuth-detectie in ~/.claude/projects/">Auto</button>
+      <button type="button" data-mode="tokens" aria-pressed="false" title="Subscription-modus — verberg USD, toon procent gespaard (Claude Code Pro/Max gebruikers)">Sub</button>
+    </span>
   </h1>
   <div class="sub">
     token-governor dashboard ·
@@ -569,6 +632,12 @@
     <h2>Bespaard t.o.v. altijd-Opus</h2>
     <div class="savings-amount" id="savings">—</div>
     <div class="savings-context" id="savings-context">Wachten op data…</div>
+    <div class="mode-disclaimer tokens-only" id="mode-disclaimer-tokens">
+      <strong>Subscription-modus actief.</strong>
+      USD-kolommen verborgen — abonnementen rekenen vast bedrag, dus dollarbesparing is niet de relevante metric.
+      Wat telt: <strong>minder tokens naar Opus</strong> = meer headroom binnen je 5h-block en weekly cap.
+      Live-feed onder toont nog wel per-call cost-info voor debugging.
+    </div>
   </section>
 
   <section class="card">
@@ -577,17 +646,17 @@
       <div class="stat">
         <div class="stat-label tier-hk">Haiku (hk)</div>
         <div class="stat-value tier-hk" id="tier-hk-count">0</div>
-        <div class="stat-label" id="tier-hk-cost">$0.00</div>
+        <div class="stat-label usd-col" id="tier-hk-cost">$0.00</div>
       </div>
       <div class="stat">
         <div class="stat-label tier-so">Sonnet (so)</div>
         <div class="stat-value tier-so" id="tier-so-count">0</div>
-        <div class="stat-label" id="tier-so-cost">$0.00</div>
+        <div class="stat-label usd-col" id="tier-so-cost">$0.00</div>
       </div>
       <div class="stat">
         <div class="stat-label tier-op">Opus (op)</div>
         <div class="stat-value tier-op" id="tier-op-count">0</div>
-        <div class="stat-label" id="tier-op-cost">$0.00</div>
+        <div class="stat-label usd-col" id="tier-op-cost">$0.00</div>
       </div>
     </div>
   </section>
@@ -620,11 +689,11 @@
         <div class="stat-label">Calls</div>
         <div class="stat-value" id="totals-count">0</div>
       </div>
-      <div class="stat">
+      <div class="stat usd-col">
         <div class="stat-label">Werkelijk uitgegeven</div>
         <div class="stat-value" id="totals-cost">$0.00</div>
       </div>
-      <div class="stat">
+      <div class="stat usd-col">
         <div class="stat-label">Baseline (alles Opus)</div>
         <div class="stat-value" id="totals-baseline">$0.00</div>
       </div>
@@ -641,9 +710,9 @@
         <th>Tier</th>
         <th>Model-hint</th>
         <th>Conf</th>
-        <th class="num">Cost</th>
-        <th class="num">Baseline</th>
-        <th class="num">Bespaard</th>
+        <th class="num usd-col">Cost</th>
+        <th class="num usd-col">Baseline</th>
+        <th class="num usd-col">Bespaard</th>
         <th>Rationale</th>
       </tr></thead>
       <tbody id="recent-body"><tr><td colspan="8" class="empty">Wachten op eerste classify-call…</td></tr></tbody>
@@ -653,7 +722,7 @@
   <section class="card full">
     <h2>Per dag</h2>
     <table id="by-day-table">
-      <thead><tr><th>Datum (UTC)</th><th class="num">Calls</th><th class="num">Kost</th><th class="num">Bespaard</th></tr></thead>
+      <thead><tr><th>Datum (UTC)</th><th class="num">Calls</th><th class="num usd-col">Kost</th><th class="num usd-col">Bespaard</th></tr></thead>
       <tbody id="by-day-body"><tr><td colspan="4" class="empty">Nog geen calls gecached</td></tr></tbody>
     </table>
   </section>
@@ -729,14 +798,24 @@ async function refreshCost() {
   document.getElementById('totals-count').textContent = tot.count || 0;
   document.getElementById('totals-cost').textContent = fmt(tot.total_usd || 0);
   document.getElementById('totals-baseline').textContent = fmt(tot.baseline_opus_usd || 0);
-  // Savings
-  document.getElementById('savings').textContent = fmt(tot.savings_usd || 0);
+  // Savings — banner-display depends on display-mode. In USD-mode we
+  // show the dollar amount prominently; in tokens-mode we show the
+  // percentage since dollars don't matter on a flat-rate subscription.
   const pct = (tot.baseline_opus_usd > 0)
     ? ((tot.savings_usd / tot.baseline_opus_usd) * 100).toFixed(0)
     : 0;
+  const mode = document.body.dataset.displayMode || 'usd';
+  if (mode === 'tokens') {
+    document.getElementById('savings').textContent = `${pct}%`;
+  } else {
+    document.getElementById('savings').textContent = fmt(tot.savings_usd || 0);
+  }
   if ((tot.count || 0) === 0) {
     document.getElementById('savings-context').textContent =
       'Nog geen gecachede calls. Doe één classify-call om te starten.';
+  } else if (mode === 'tokens') {
+    document.getElementById('savings-context').textContent =
+      `${tot.count} call${tot.count === 1 ? '' : 's'} geclassified naar goedkopere tiers — ${pct}% minder Opus-budget verbruikt dan zonder routing.`;
   } else {
     document.getElementById('savings-context').textContent =
       `${pct}% goedkoper dan altijd-Opus, over ${tot.count} call${tot.count === 1 ? '' : 's'}.`;
@@ -753,8 +832,8 @@ async function refreshCost() {
       return `<tr>
         <td>${k}</td>
         <td class="num">${d.count || 0}</td>
-        <td class="num">${fmt(d.total_usd || 0)}</td>
-        <td class="num" style="color: var(--color-accent)">${fmt(d.savings_usd || 0)}</td>
+        <td class="num usd-col">${fmt(d.total_usd || 0)}</td>
+        <td class="num usd-col" style="color: var(--color-accent)">${fmt(d.savings_usd || 0)}</td>
       </tr>`;
     }).join('');
   }
@@ -806,6 +885,50 @@ document.getElementById('governor-toggle').addEventListener('click', async (e) =
       showToast('Kan toggle niet wijzigen — server bereikbaar?', 'toast-off');
     }
   }
+});
+
+// Display-mode toggle: 3-state pill in the header (USD / Auto / Sub).
+// Polls /display/mode at refreshAll cadence, writes the *effective* mode
+// to body[data-display-mode] which drives CSS-based USD-col hiding.
+async function refreshDisplayMode() {
+  const s = await fetchJson('/display/mode');
+  if (!s) return;
+  const stored = s.mode || 'auto';
+  const effective = s.effective || 'usd';
+  document.body.dataset.displayMode = effective;
+  document.querySelectorAll('#display-mode-toggle button').forEach(btn => {
+    btn.setAttribute('aria-pressed', String(btn.dataset.mode === stored));
+  });
+  // Auto-mode tooltip indicates why it resolved as it did.
+  const autoBtn = document.querySelector('#display-mode-toggle button[data-mode="auto"]');
+  if (autoBtn) {
+    autoBtn.title = s.oauth_detected
+      ? 'Auto-detecteer — OAuth gevonden in ~/.claude/projects/, resolveert naar Subscription-modus'
+      : 'Auto-detecteer — geen OAuth gevonden, resolveert naar USD-modus';
+  }
+}
+
+document.querySelectorAll('#display-mode-toggle button').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const newMode = btn.dataset.mode;
+    if (!newMode) return;
+    const resp = await fetchJson('/display/mode', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: newMode }),
+    });
+    if (resp) {
+      showToast(
+        newMode === 'auto'
+          ? 'Display-modus: Auto-detect'
+          : (newMode === 'tokens' ? 'Subscription-modus — USD verborgen' : 'USD-modus — dollarbedragen zichtbaar'),
+        'toast-ok'
+      );
+      await refreshDisplayMode();
+    } else {
+      showToast('Kan display-modus niet wijzigen — server bereikbaar?', 'toast-off');
+    }
+  });
 });
 
 async function refreshShift() {
@@ -938,9 +1061,9 @@ async function refreshRecent() {
       <td><span class="tier-pill ${tier}">${tier.toUpperCase()}</span></td>
       <td><code>${escapeHtml(resp.model_hint || '—')}</code></td>
       <td>${resp.confidence != null ? resp.confidence + '%' : '—'}</td>
-      <td class="num">${fmt(cost)}</td>
-      <td class="num">${fmt(baseline)}</td>
-      <td class="num" style="color: var(--color-accent)">${fmt(savings)}</td>
+      <td class="num usd-col">${fmt(cost)}</td>
+      <td class="num usd-col">${fmt(baseline)}</td>
+      <td class="num usd-col" style="color: var(--color-accent)">${fmt(savings)}</td>
       <td class="rationale" title="${escapeHtml(resp.rationale || '')}">${escapeHtml(resp.rationale || '')}</td>
     </tr>`;
   }).join('');
@@ -983,7 +1106,7 @@ resetBtn.addEventListener('click', async () => {
 });
 
 async function refreshAll() {
-  await Promise.all([refreshHealth(), refreshCost(), refreshShift(), refreshGovernorState()]);
+  await Promise.all([refreshHealth(), refreshCost(), refreshShift(), refreshGovernorState(), refreshDisplayMode()]);
 }
 
 refreshAll();
