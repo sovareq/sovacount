@@ -406,8 +406,13 @@ Caveman = output-compressie via instructie-tweak. SovaCount = input-routering na
 |---|---|---|
 | [Caveman](https://github.com/JuliusBrussee/caveman) (door [@JuliusBrussee](https://github.com/JuliusBrussee)) | LLM-output | ~75% minder response-tokens via terse-instructie |
 | **SovaCount** | LLM-input | Goedkoper model per scope (HK / SO / OP) |
+| [savings-mirror](https://github.com/sovareq/savings-mirror) | Post-hoc meting | USD-besparing dashboard — leest Claude Code JSONL + SovaCount `/cost`, toont per-dag/cumulatieve winst |
 
-Stack: SovaCount routet naar HK + Caveman comprimeert HK's antwoord = max win. Of gebruik elk los — SovaCount draait standalone als HTTP-server / MCP / CLI zonder Caveman te kennen, en omgekeerd.
+Stack: SovaCount routet naar HK + Caveman comprimeert HK's antwoord = max win.
+savings-mirror sluit de loop: pollt `/cost` en visualiseert wat Caveman + SovaCount
+samen daadwerkelijk bespaarden op je eigen transcripten. Of gebruik elk los —
+SovaCount draait standalone als HTTP-server / MCP / CLI zonder Caveman of
+savings-mirror te kennen, en omgekeerd.
 
 ## Roadmap
 
