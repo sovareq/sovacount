@@ -28,8 +28,11 @@ ignore = [
 
 [licenses]
 version = 2
-# Workspace-crates dragen `license = "UNLICENSED"` (proprietary, intern Sovareq,
-# `publish = false`). cargo-deny behandelt deze als private-exception.
+# Workspace-crates dragen `license = "MIT"` met `publish = false` — we publishen
+# niet naar crates.io maar de source is openbaar onder MIT (zie LICENSE).
+# `private.ignore` blijft true zodat cargo-deny onze eigen crates niet tegen
+# de allow-list checkt (MIT zit er sowieso in, maar dit is robuuster voor
+# toekomstige edge-cases zoals split-licensing per crate).
 private = { ignore = true }
 allow = [
     "MIT",
