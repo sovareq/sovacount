@@ -119,6 +119,18 @@ Eénmalig, daarna werkt dubbelklikken normaal.
 
 Volledige distributie-doc: [`docs/distribution.md`](docs/distribution.md).
 
+### Platform-support (eerlijke status)
+
+| Platform | Status | Wat het betekent |
+|---|---|---|
+| **macOS arm64** (Apple Silicon) | ✅ **Tier 1** | Sovareq dev-machine, lokaal getest, primaire doelplatform |
+| **macOS x86_64** (Intel) | 🟡 **Tier 2** | CI bouwt, niet handmatig getest door maintainer (geen Intel-Mac in huis) |
+| **Linux x86_64** | 🟡 **Tier 2** | CI bouwt, niet handmatig getest door maintainer. CLI/HTTP/MCP — geen launcher-`.app` op Linux |
+| **Windows x86_64** | ⚠️ **Tier 3 — best-effort** | CI bouwt en build slaagt, maar Sovareq heeft geen Windows-machine om runtime-gedrag te verifiëren. Bug-reports welkom; PRs voor Windows-specifieke fixes ook |
+| **Linux aarch64** | ❌ **Niet shipped** | Geen GitHub-hosted runner; bouw zelf vanuit source met `cargo build --release` |
+
+De `governor-launcher-gui` `.app`-shell is **alleen macOS**. CLI / HTTP-server / MCP-server crates compileren op alle platforms.
+
 ## Quickstart — CLI (`tier-classify`)
 
 ```bash
