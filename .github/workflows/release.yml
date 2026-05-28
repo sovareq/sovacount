@@ -74,12 +74,16 @@ jobs:
           shared-key: release-${{ matrix.target }}
 
       - name: Build CLI / HTTP / MCP binaries
+        # Force bash so the `\` line-continuation works on Windows runners
+        # too (default shell there is PowerShell, which treats `\` literally).
+        shell: bash
         run: |
           cargo build --release --target ${{ matrix.target }} \
             -p governor-cli -p governor-http -p governor-mcp
 
       - name: Build sovacount-launcher (macOS only)
         if: contains(matrix.target, 'apple-darwin')
+        shell: bash
         run: |
           cargo build --release --target ${{ matrix.target }} -p governor-launcher-gui
 
