@@ -1,17 +1,17 @@
-# Contributing to Token Governor
+# Contributing to SovaCount
 
 Thanks for considering a contribution. This document describes the dev
 workflow, the bar for code quality, and how to add a new provider.
 
 ## Dev setup
 
-Token Governor is a Rust 2024 workspace, MSRV 1.94. The toolchain is pinned
+SovaCount is a Rust 2024 workspace, MSRV 1.94. The toolchain is pinned
 in `rust-toolchain.toml`; rustup will pick it up automatically.
 
 ```bash
 # Clone and build (debug)
-git clone https://github.com/sovareq/token-governor.git
-cd token-governor
+git clone https://github.com/sovareq/sovacount.git
+cd sovacount
 cargo build --workspace
 
 # Or: install the three binaries on your $PATH

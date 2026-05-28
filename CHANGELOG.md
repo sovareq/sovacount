@@ -192,6 +192,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Ollama: `@hk` → `llama3.2:3b`, `@so` → `llama3.3:70b`,
   `@op` → `deepseek-r1:70b`. Classifier itself: `deepseek-r1:70b`.
 
-[Unreleased]: https://github.com/sovareq/token-governor/compare/v0.2.0...HEAD
-[0.2.0]: https://github.com/sovareq/token-governor/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/sovareq/token-governor/releases/tag/v0.1.0
+[Unreleased]: https://github.com/sovareq/sovacount/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/sovareq/sovacount/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/sovareq/sovacount/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/sovareq/sovacount/releases/tag/v0.1.0
