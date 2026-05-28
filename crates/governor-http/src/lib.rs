@@ -76,6 +76,10 @@ pub struct AppState<C: ClassifierLike> {
     /// `$HOME/.config/token-governor/enabled`. Absent file = enabled.
     /// Content `0` = disabled, anything else = enabled.
     enabled_path: Arc<PathBuf>,
+    /// Path to the persistent display-mode file. Default is
+    /// `$HOME/.config/token-governor/display_mode`. Contains one of
+    /// `usd` / `tokens` / `auto`. Absent = `auto`.
+    display_mode_path: Arc<PathBuf>,
     /// Zender naar de classify-worker. `None` betekent: directe path
     /// (gebruikt door tests en als fallback). `Some(tx)` betekent:
     /// non-blocking enqueue via een bounded mpsc-channel.
@@ -91,6 +95,7 @@ impl<C: ClassifierLike> Clone for AppState<C> {
             api_key: self.api_key.clone(),
             shift_path: Arc::clone(&self.shift_path),
             enabled_path: Arc::clone(&self.enabled_path),
+            display_mode_path: Arc::clone(&self.display_mode_path),
             classify_tx: self.classify_tx.clone(),
         }
     }
@@ -115,6 +120,7 @@ impl<C: ClassifierLike> AppState<C> {
             api_key,
             shift_path: Arc::new(default_shift_path()),
             enabled_path: Arc::new(default_enabled_path()),
+            display_mode_path: Arc::new(default_display_mode_path()),
             classify_tx: None,
         }
     }
@@ -129,6 +135,12 @@ impl<C: ClassifierLike> AppState<C> {
     /// Override the enabled-flag path (used by tests).
     pub fn with_enabled_path(mut self, path: PathBuf) -> Self {
         self.enabled_path = Arc::new(path);
+        self
+    }
+
+    /// Override the display-mode path (used by tests).
+    pub fn with_display_mode_path(mut self, path: PathBuf) -> Self {
+        self.display_mode_path = Arc::new(path);
         self
     }
 
@@ -184,6 +196,71 @@ fn read_enabled(path: &std::path::Path) -> bool {
     }
 }
 
+/// Default on-disk location for the persistent display-mode preference.
+fn default_display_mode_path() -> PathBuf {
+    let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+    home.join(".config")
+        .join("token-governor")
+        .join("display_mode")
+}
+
+/// Read the persistent display-mode. Returns one of `"usd" | "tokens" | "auto"`.
+/// Absent / unreadable / unrecognised → `"auto"` (default).
+fn read_display_mode(path: &std::path::Path) -> &'static str {
+    match std::fs::read_to_string(path) {
+        Ok(s) => match s.trim() {
+            "usd" => "usd",
+            "tokens" => "tokens",
+            _ => "auto",
+        },
+        Err(_) => "auto",
+    }
+}
+
+/// Auto-detect whether the user is on a flat-rate Claude Code subscription
+/// (Pro/Max) versus a pay-per-token API setup. Heuristic: presence of any
+/// session-transcript JSONL under `~/.claude/projects/*/sessions/*.jsonl`
+/// is a strong signal that Claude Code is OAuth-authenticated (subscription
+/// path). On API-key-only setups this directory tree typically does not
+/// exist.
+///
+/// Returns `"tokens"` (= subscription-style display) when OAuth is detected,
+/// `"usd"` otherwise.
+fn auto_detect_mode() -> &'static str {
+    let Some(home) = dirs::home_dir() else {
+        return "usd";
+    };
+    let projects_root = home.join(".claude").join("projects");
+    if !projects_root.exists() {
+        return "usd";
+    }
+    // Cheap check: at least one entry under projects_root, and at least one
+    // file path containing "/sessions/" with a `.jsonl` extension. We bail
+    // out after the first match so this stays fast even with many projects.
+    let Ok(project_iter) = std::fs::read_dir(&projects_root) else {
+        return "usd";
+    };
+    for project in project_iter.flatten() {
+        let path = project.path();
+        if !path.is_dir() {
+            continue;
+        }
+        // Either flat layout (`*.jsonl` directly in the project dir) or
+        // nested (`sessions/*.jsonl`) — both seen in the wild across CC
+        // versions. Check both.
+        for candidate in [path.clone(), path.join("sessions")] {
+            if let Ok(file_iter) = std::fs::read_dir(&candidate) {
+                for entry in file_iter.flatten() {
+                    if entry.path().extension().and_then(|s| s.to_str()) == Some("jsonl") {
+                        return "tokens";
+                    }
+                }
+            }
+        }
+    }
+    "usd"
+}
+
 /// Build the axum [`Router`] with all routes wired to the given state.
 ///
 /// Adds:
@@ -199,6 +276,10 @@ pub fn router<C: ClassifierLike>(state: AppState<C>) -> Router {
         .route(
             "/governor/state",
             get(governor_state_get::<C>).post(governor_state_post::<C>),
+        )
+        .route(
+            "/display/mode",
+            get(display_mode_get::<C>).post(display_mode_post::<C>),
         )
         .route("/reset", post(reset::<C>))
         .route("/recent", get(recent::<C>))
@@ -459,6 +540,96 @@ async fn governor_state_post<C: ClassifierLike>(
         StatusCode::OK,
         Json(GovernorStateBody {
             enabled: body.enabled,
+        }),
+    )
+        .into_response()
+}
+
+#[derive(Debug, Serialize, serde::Deserialize)]
+struct DisplayModeBody {
+    /// `"usd"` | `"tokens"` | `"auto"`.
+    mode: String,
+}
+
+#[derive(Debug, Serialize)]
+struct DisplayModeResponse {
+    /// User's stored preference: `"usd"` | `"tokens"` | `"auto"`.
+    mode: String,
+    /// What that preference resolves to right now: `"usd"` | `"tokens"`.
+    /// For `"auto"` this is the live auto-detection result; otherwise
+    /// equals `mode`.
+    effective: String,
+    /// `true` when `~/.claude/projects/**/*.jsonl` exists (Claude Code
+    /// OAuth-authenticated subscription mode detected). Surfaces to the
+    /// dashboard so the auto-mode tooltip can show *why* it resolved.
+    oauth_detected: bool,
+}
+
+/// `GET /display/mode` — return the stored display-mode preference and
+/// what it currently resolves to. Not auth-gated: read-only and feeds
+/// the dashboard polling loop.
+async fn display_mode_get<C: ClassifierLike>(State(state): State<AppState<C>>) -> Response {
+    let stored = read_display_mode(state.display_mode_path.as_ref());
+    let detected = auto_detect_mode();
+    let effective = if stored == "auto" { detected } else { stored };
+    let body = DisplayModeResponse {
+        mode: stored.to_string(),
+        effective: effective.to_string(),
+        oauth_detected: detected == "tokens",
+    };
+    (StatusCode::OK, Json(body)).into_response()
+}
+
+/// `POST /display/mode` — set the stored display-mode preference. Body:
+/// `{"mode": "usd" | "tokens" | "auto"}`. Anything else is rejected with
+/// HTTP 400 so we never persist garbage. Auth-gated like `/classify` —
+/// flipping the display affects every viewer of the dashboard.
+async fn display_mode_post<C: ClassifierLike>(
+    State(state): State<AppState<C>>,
+    headers: HeaderMap,
+    body: Json<DisplayModeBody>,
+) -> Response {
+    if let Some(resp) = check_auth(&state, &headers) {
+        return resp;
+    }
+    let normalised = match body.mode.as_str() {
+        "usd" => "usd",
+        "tokens" => "tokens",
+        "auto" => "auto",
+        other => {
+            return error_response(
+                StatusCode::BAD_REQUEST,
+                &format!("invalid mode `{other}` — expected one of: usd, tokens, auto"),
+            );
+        }
+    };
+    let path = state.display_mode_path.as_ref();
+    if let Some(parent) = path.parent()
+        && let Err(e) = std::fs::create_dir_all(parent)
+    {
+        return error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            &format!("create display-mode dir: {e}"),
+        );
+    }
+    if let Err(e) = std::fs::write(path, format!("{normalised}\n")) {
+        return error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            &format!("write display-mode: {e}"),
+        );
+    }
+    let detected = auto_detect_mode();
+    let effective = if normalised == "auto" {
+        detected
+    } else {
+        normalised
+    };
+    (
+        StatusCode::OK,
+        Json(DisplayModeResponse {
+            mode: normalised.to_string(),
+            effective: effective.to_string(),
+            oauth_detected: detected == "tokens",
         }),
     )
         .into_response()
@@ -1126,7 +1297,8 @@ mod tests {
         let fake = FakeClassifier::ok(canned_response());
         let state = AppState::new(fake, api_key)
             .with_shift_path(tmp.path().join("shift"))
-            .with_enabled_path(tmp.path().join("enabled"));
+            .with_enabled_path(tmp.path().join("enabled"))
+            .with_display_mode_path(tmp.path().join("display_mode"));
         router(state)
     }
 
@@ -1218,6 +1390,117 @@ mod tests {
                     .uri("/governor/state")
                     .header("content-type", "application/json")
                     .body(Body::from(r#"{"enabled":false}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn display_mode_get_defaults_to_auto_when_file_absent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let app = make_app_with_toggle_dir(&tmp, None);
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/display/mode")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = read_body(resp).await;
+        let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(v["mode"], "auto");
+        // `effective` is whatever auto_detect_mode() returns for this host;
+        // both "usd" and "tokens" are valid. Just assert the field exists.
+        assert!(
+            v["effective"] == "usd" || v["effective"] == "tokens",
+            "effective should be one of usd/tokens, got: {v:?}"
+        );
+        assert!(v["oauth_detected"].is_boolean());
+    }
+
+    #[tokio::test]
+    async fn display_mode_post_persists_and_get_reads_back() {
+        let tmp = tempfile::tempdir().unwrap();
+        let app = make_app_with_toggle_dir(&tmp, None);
+        let post = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/display/mode")
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"mode":"tokens"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(post.status(), StatusCode::OK);
+
+        let on_disk = std::fs::read_to_string(tmp.path().join("display_mode")).unwrap();
+        assert_eq!(on_disk.trim(), "tokens");
+
+        let get = app
+            .oneshot(
+                Request::builder()
+                    .uri("/display/mode")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let bytes = read_body(get).await;
+        let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(v["mode"], "tokens");
+        // When stored mode is an explicit "tokens"/"usd", effective should
+        // mirror it regardless of host auto-detection state.
+        assert_eq!(v["effective"], "tokens");
+    }
+
+    #[tokio::test]
+    async fn display_mode_post_rejects_invalid_value() {
+        let tmp = tempfile::tempdir().unwrap();
+        let app = make_app_with_toggle_dir(&tmp, None);
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/display/mode")
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"mode":"euro"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        let bytes = read_body(resp).await;
+        let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert!(
+            v["error"].as_str().unwrap().contains("invalid mode"),
+            "expected error to mention invalid mode, got: {v:?}"
+        );
+        // And the on-disk file should NOT have been written.
+        assert!(
+            !tmp.path().join("display_mode").exists(),
+            "rejected mode must not be persisted"
+        );
+    }
+
+    #[tokio::test]
+    async fn display_mode_post_requires_auth_when_key_set() {
+        let tmp = tempfile::tempdir().unwrap();
+        let app = make_app_with_toggle_dir(&tmp, Some("secret-key".into()));
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/display/mode")
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"mode":"usd"}"#))
                     .unwrap(),
             )
             .await

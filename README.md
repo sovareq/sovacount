@@ -169,6 +169,8 @@ curl -X POST http://127.0.0.1:8989/classify \
 | `POST` | `/reset` | Wis alle `.json`-bestanden uit de classifier-cache. Returnt `{"deleted_files": N, "cache_dir": "..."}` |
 | `GET` | `/governor/state` | Lees routing-toggle (`{"enabled": bool}`). Absent state-file = `true` (fail-open). |
 | `POST` | `/governor/state` | Zet routing-toggle (`{"enabled": bool}`). Bij `false` retourneert `/classify` 503 `"governor disabled"`. Gepersisteerd naar `~/.config/token-governor/enabled`. Auth-gated als API-key gezet. |
+| `GET` | `/display/mode` | Lees dashboard display-mode preference (`{"mode": "usd"\|"tokens"\|"auto", "effective": "usd"\|"tokens", "oauth_detected": bool}`). `effective` resolveert `auto` op basis van OAuth-detectie in `~/.claude/projects/`. |
+| `POST` | `/display/mode` | Zet display-mode (`{"mode": "usd"\|"tokens"\|"auto"}`). Onbekende mode → HTTP 400. Gepersisteerd naar `~/.config/token-governor/display_mode`. Auth-gated als API-key gezet. |
 
 ### Auth (optioneel)
 
