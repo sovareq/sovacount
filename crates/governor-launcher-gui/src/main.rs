@@ -171,22 +171,36 @@ fn main() -> wry::Result<()> {
 
     // 3. Single-instance lock — voorkomt dat een tweede launcher de poort 8989
     //    binding probeert te stelen of orphan-children spawnt.
-    let instance = SingleInstance::new(LAUNCHER_LOCK_KEY).map_err(|e| {
-        error!(error = %e, "single-instance check failed");
-        wry::Error::Io(std::io::Error::other(e.to_string()))
-    })?;
-    if !instance.is_single() {
-        eprintln!(
-            "[sovacount-launcher] another instance is already running — focusing it would be nice, exiting for now"
-        );
-        info!("rejecting second instance, exiting");
-        // Open dashboard in browser zodat de gebruiker iets nuttigs ziet
-        // ipv silent exit.
-        let _ = Command::new("open")
-            .arg(format!("http://127.0.0.1:{GOVERNOR_PORT}/"))
-            .status();
-        std::process::exit(0);
-    }
+    //
+    //    Op macOS Sequoia 15.5 faalt `SingleInstance::new("dotted.key")` met
+    //    "file open or create error" — de crate kiest dan een default-path
+    //    dat niet schrijfbaar is. Workaround: gebruik een expliciet /tmp pad.
+    //    Faal niet fatal als de check niet lukt — env-guard + tao
+    //    LoopDestroyed dekken het meeste; single-instance is defensieve laag.
+    let lock_path = std::env::temp_dir()
+        .join(LAUNCHER_LOCK_KEY)
+        .to_string_lossy()
+        .into_owned();
+    let _instance_keepalive: Option<SingleInstance> = match SingleInstance::new(&lock_path) {
+        Ok(i) => {
+            if !i.is_single() {
+                eprintln!(
+                    "[sovacount-launcher] another instance is already running — opening dashboard in browser"
+                );
+                info!("rejecting second instance, exiting");
+                let _ = Command::new("open")
+                    .arg(format!("http://127.0.0.1:{GOVERNOR_PORT}/"))
+                    .status();
+                std::process::exit(0);
+            }
+            // Lock blijft actief zolang dit binding leeft.
+            Some(i)
+        }
+        Err(e) => {
+            warn!(error = %e, lock_path = %lock_path, "single-instance check failed — falling back to env-guard only");
+            None
+        }
+    };
 
     // 4. Event-loop bouw.
     let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
