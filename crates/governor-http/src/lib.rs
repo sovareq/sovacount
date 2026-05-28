@@ -240,7 +240,10 @@ async fn reset<C: ClassifierLike>(
     let dir = match resolve_cache_dir() {
         Some(d) => d,
         None => {
-            return error_response(StatusCode::INTERNAL_SERVER_ERROR, "cache dir not resolvable");
+            return error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "cache dir not resolvable",
+            );
         }
     };
     // Reuse auth-check (Bearer-token if state is configured)
@@ -344,7 +347,10 @@ async fn recent<C: ClassifierLike>(
                     .duration_since(std::time::UNIX_EPOCH)
                     .map(|d| d.as_secs())
                     .unwrap_or(0);
-                entries.push(RecentEntry { mtime_unix, response: resp });
+                entries.push(RecentEntry {
+                    mtime_unix,
+                    response: resp,
+                });
             }
         }
     }
@@ -1116,10 +1122,7 @@ mod tests {
 
     /// Build a router with isolated tempdir-paths for both shift- and
     /// enabled-files so toggle-tests cannot touch the real `$HOME`.
-    fn make_app_with_toggle_dir(
-        tmp: &tempfile::TempDir,
-        api_key: Option<String>,
-    ) -> Router {
+    fn make_app_with_toggle_dir(tmp: &tempfile::TempDir, api_key: Option<String>) -> Router {
         let fake = FakeClassifier::ok(canned_response());
         let state = AppState::new(fake, api_key)
             .with_shift_path(tmp.path().join("shift"))
