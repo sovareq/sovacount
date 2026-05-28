@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- WKWebView needs JIT for V8/JavaScriptCore. -->
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+
+  <!-- WebKit allocates unsigned executable JIT pages. -->
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+
+  <!-- governor-http performs outbound HTTPS to Anthropic/OpenAI/Ollama. -->
+  <key>com.apple.security.network.client</key>
+  <true/>
+
+  <!-- We deliberately do NOT enable app-sandbox: outside the App Store,
+       Developer ID + Hardened Runtime is sufficient, and the sandbox would
+       block legitimate filesystem access to ~/.config/sovacount/ and the
+       on-disk cache directory. -->
+</dict>
+</plist>

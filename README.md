@@ -59,7 +59,7 @@ In april 2026 classifeerden de gangbare tiered-routers (TokenMix.ai, Morph Route
 ### Vanuit source
 
 ```bash
-git clone https://codeberg.org/sovareq_bv/sovacount.git
+git clone https://github.com/sovareq/sovacount.git
 cd sovacount
 cargo build --release --workspace
 
@@ -70,7 +70,31 @@ cp target/release/{tier-classify,governor-http,governor-mcp,sovacount-launcher} 
 
 Cargo workspace is `edition = "2024"`, `rust-version = "1.94"` (zie [`Cargo.toml`](Cargo.toml) workspace.package). Toolchain-pin in [`rust-toolchain.toml`](rust-toolchain.toml).
 
-Alle crates dragen `#![forbid(unsafe_code)]`.
+Alle product-crates dragen `#![forbid(unsafe_code)]` — alleen `governor-launcher-gui` heeft één `unsafe` block voor de `libc::kill(pid, SIGTERM)` syscall (gedocumenteerd in [`main.rs`](crates/governor-launcher-gui/src/main.rs)).
+
+### macOS — `.app`-launcher bundelen
+
+De `LAUNCHER/SovaCount.app/Contents/MacOS/sovacount-launcher` in de repo is een
+ontwikkel-stub. Voor een werkende `.app` gebruik je het package-script:
+
+```bash
+# Ad-hoc signing (eigen Mac, geen Apple Account nodig)
+./scripts/package-macos.sh
+
+# Verplaats naar Applications/
+cp -R dist/SovaCount.app ~/Applications/
+
+# Eerste run zonder quarantine-prompt (gebouwd op dezelfde Mac):
+open ~/Applications/SovaCount.app
+```
+
+Het script bouwt `governor-http` + `sovacount-launcher`, kopieert ze naar
+`dist/SovaCount.app/Contents/{MacOS,Resources}/`, en doet `codesign`. De
+launcher vindt `governor-http` automatisch in `Contents/Resources/` —
+geen extra `~/.local/bin/` install nodig voor de `.app`-flow.
+
+Voor distributie naar andere Macs (Developer ID + notarization), zie
+[`docs/distribution.md`](docs/distribution.md).
 
 ## Quickstart — CLI (`tier-classify`)
 
